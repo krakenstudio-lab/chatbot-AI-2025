@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="it">
+
+<head>
+  <meta charset="UTF-8" />
+  <title>Chatbot AI</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+
+<body class="bg-gray-100 min-h-screen">
+
+  <!-- Bottone tondo flottante -->
+  <button id="chatLauncher" class="fixed bottom-4 right-4 z-40 h-14 w-14 rounded-full bg-blue-600 text-white shadow-lg
+                 hover:bg-blue-700 focus:outline-none focus:ring-4 focus:ring-blue-300
+                 flex items-center justify-center">
+    <!-- icona fumetto -->
+    <svg xmlns="http://www.w3.org/2000/svg" class="h-7 w-7" viewBox="0 0 24 24" fill="currentColor">
+      <path d="M20 2H4a2 2 0 0 0-2 2v16l4-4h14a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2z" />
+    </svg>
+    <span class="sr-only">Apri chat</span>
+  </button>
+
+  <!-- Modal -->
+  <div id="chatModal" class="fixed inset-0 z-50 hidden" role="dialog" aria-modal="true" aria-labelledby="chatTitle">
+    <!-- overlay -->
+    <div class="absolute inset-0 bg-black/40 backdrop-blur-[1px]" data-close="true"></div>
+
+    <!-- contenitore -->
+    <div class="absolute inset-x-0 bottom-0 p-3
+                sm:inset-0 sm:flex sm:items-center sm:justify-center sm:p-4">
+      <div class="bg-white rounded-2xl shadow-xl w-full sm:max-w-md h-[85vh] sm:h-[80vh] flex flex-col">
+
+        <!-- Header -->
+        <div class="px-4 py-3 border-b border-gray-200 flex items-center justify-between">
+          <h1 id="chatTitle" class="text-base font-semibold">Chatbot AI</h1>
+          <button id="chatClose" class="p-2 rounded-full hover:bg-gray-100" aria-label="Chiudi">
+            <!-- X -->
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 24 24" fill="none"
+              stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+
+        <!-- Chat window -->
+        <div id="chatWindow" class="flex-1 overflow-y-auto p-4 space-y-4 bg-gray-50">
+          <!-- Messaggi -->
+        </div>
+
+        <!-- Input area -->
+        <div class="px-4 py-3 border-t border-gray-200">
+          <textarea id="promptInput" rows="2" placeholder="Scrivi un messaggio..."
+            class="w-full p-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-400 resize-none"></textarea>
+          <div class="text-right mt-2">
+            <button id="sendBtn" class="bg-blue-500 hover:bg-blue-600 text-white font-medium py-2 px-4 rounded-lg">
+              Invia
+            </button>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+  <script src="script.js"></script>
+</body>
+
+</html>

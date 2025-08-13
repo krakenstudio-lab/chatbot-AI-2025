@@ -1,0 +1,30 @@
+# Dipendenze
+node_modules/
+
+# Variabili d'ambiente
+.env
+
+# Log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Cartelle di build / output
+dist/
+build/
+public/styles/output.css
+
+# IDE e editor
+.vscode/
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+
+# Sistema operativo
+.DS_Store
+Thumbs.db
+
+# Cache
+.cache/
