@@ -107,4 +107,4 @@ Usa sempre HTTPS in produzione
 NON esporre la tua OPENAI_API_KEY nel client
 
 ### 🎉 Conclusioni
-Backend Node.js modulare e interfaccia web responsive per chat step-by-step e generazione di preventivi AI, facilmente estendibile e integrabile in diversi ambienti. Enjoy!
+Backend Node.js modulare e interfaccia web responsive per chat step-by-step e generazione di preventivi AI, facilmente estendibile e integrabile in diversi ambienti. Enjoy!!
