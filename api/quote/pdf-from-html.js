@@ -1,7 +1,7 @@
 // api/quote/pdf-from-html.js
 const {
   generateQuotePdfFromHtml,
-} = require("../src/pdf/generateQuotePdfFromHtml");
+} = require("../../src/pdf/generateQuotePdfFromHtml");
 
 export const config = {
   maxDuration: 60,
