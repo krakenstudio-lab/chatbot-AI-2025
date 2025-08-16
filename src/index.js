@@ -14,7 +14,7 @@ const { generateQuotePdfFromHtml } = require("./pdf/generateQuotePdfFromHtml");
 
 const app = express();
 app.use(cors());
-app.use(express.json());
+app.use(express.json({ limit: "2mb" })); // preventivi lunghi + meta
 app.use(express.static(path.join(__dirname, "../public")));
 
 // POST /api/chat
@@ -52,9 +52,17 @@ app.post("/api/quote/pdf-from-html", async (req, res) => {
       meta: meta || {},
       filename: `preventivo-${(customer.name || "cliente").toLowerCase()}`,
     });
+    // importa: se la funzione ha inviato il PDF correttamente, esci
+    return;
   } catch (err) {
     console.error("Errore /api/quote/pdf-from-html:", err);
-    res.status(500).json({ error: "Errore nella generazione del PDF (HTML)" });
+    // In debug mostra anche il messaggio reale:
+    res
+      .status(500)
+      .json({
+        error: "Errore nella generazione del PDF (HTML)",
+        details: String(err?.message || err),
+      });
   }
 });
 
