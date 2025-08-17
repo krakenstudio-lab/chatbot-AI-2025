@@ -9,18 +9,21 @@ async function generateQuotePdfFromHtml(
 
   // Tentativo 1: ambiente serverless (Vercel, AWS Lambda)
   try {
-    const chromium = await import("@sparticuz/chromium");
-    const puppeteer = await import("puppeteer-core");
+    const { default: chromium } = await import("@sparticuz/chromium");
+    const { default: puppeteer } = await import("puppeteer-core");
+
+    const executablePath = await chromium.executablePath();
 
     const browser = await puppeteer.launch({
-      args: chromium.args,
-      executablePath: await chromium.executablePath(), // path al binario corretto
-      headless: chromium.headless,
-      defaultViewport: chromium.defaultViewport,
+      args: [...chromium.args, "--no-sandbox", "--disable-setuid-sandbox"],
+      executablePath,
+      headless: true, // su Vercel va true
+      defaultViewport: chromium.defaultViewport ?? { width: 1280, height: 800 },
     });
 
     const page = await browser.newPage();
     await page.setContent(html, { waitUntil: "networkidle0" });
+
     const pdfBuffer = await page.pdf({ format: "A4", printBackground: true });
     await browser.close();
 
@@ -31,6 +34,8 @@ async function generateQuotePdfFromHtml(
     );
     return res.end(pdfBuffer);
   } catch (e1) {
+    console.error("[PDF] Serverless launch failed:", e1?.stack || e1);
+
     // Tentativo 2: ambiente “server” classico (VPS/Docker) con puppeteer normale
     try {
       const puppeteer = require("puppeteer");
@@ -50,11 +55,7 @@ async function generateQuotePdfFromHtml(
       );
       return res.end(pdfBuffer);
     } catch (e2) {
-      // Ultimo fallback (opzionale): usa il generatore PDF “testuale” così almeno consegni qualcosa
-      // const { generateQuotePdfFromText } = require("./generateQuotePdfFromText");
-      // return generateQuotePdfFromText(res, { agency, customer, text: stripHtml(quoteText), filename });
-
-      // Se preferisci fallire esplicitamente:
+      console.error("[PDF] Fallback launch failed:", e2?.stack || e2);
       throw e2;
     }
   }
