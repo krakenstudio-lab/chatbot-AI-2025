@@ -19,15 +19,22 @@ function toNumber(v) {
   if (v == null) return null;
   if (typeof v === "number" && Number.isFinite(v)) return v;
   if (typeof v === "string") {
-    const n = Number(v.replace(/\s/g, "").replace(/\./g, "").replace(",", "."));
+    // rimuovi spazi normali, NBSP, NARROW NBSP e simbolo €
+    const cleaned = v
+      .replace(/[\s\u00A0\u202F]/g, "")
+      .replace(/€/g, "")
+      .replace(/\./g, "")
+      .replace(",", ".");
+    const n = Number(cleaned);
     return Number.isFinite(n) ? n : null;
   }
   return null;
 }
 
 function sumLineItems(text) {
+  // bullet -/•, label (con o senza bold), separatore opzionale : o –, importo, € opzionale
   const re =
-    /(?:^|\n|\s)[-•]\s*(?:\*\*|__)?[^:\n]+?(?:\*\*|__)?\s*:\s*([0-9][0-9\.,]*)\s*(?:€|euro)\b/gi;
+    /(?:^|\n|\s)[-•]\s*(?:\*\*|__)?[^:\n]+?(?:\*\*|__)?\s*(?:[:\-–]\s*)?([0-9][0-9\.,]*)\s*(?:€|euro)?\b/gi;
   let sum = 0,
     hit = false,
     m;
@@ -83,7 +90,22 @@ function stripFinalJsonBlock(s) {
  * @param {object} params.meta  JSON finale dell'AI: { pdfReady, package, subtotal, discount, total, currency, deliveryTime, validityDays }
  * @param {string} params.date  "DD/MM/YYYY"
  */
+
+function extractFenceMeta(text) {
+  const m = String(text).match(/```json\s*([\s\S]*?)\s*```/i);
+  if (!m) return null;
+  try {
+    return JSON.parse(m[1]);
+  } catch {
+    return null;
+  }
+}
+
 function renderQuoteHtml({ agency, customer, quoteText, meta = {}, date }) {
+  // Unisci meta esplicito + quello nel fence JSON (se presente)
+  const fenceMeta = extractFenceMeta(quoteText || "") || {};
+  meta = { ...meta, ...fenceMeta };
+
   const pkg = meta.package || inferPackageFromText(quoteText) || "—";
 
   // leggi numeri dal meta (anche se sono stringhe "1.500,00")
@@ -163,7 +185,8 @@ function renderQuoteHtml({ agency, customer, quoteText, meta = {}, date }) {
         <div class="text-[11px] uppercase tracking-wide text-slate-500">Documento</div>
         <div class="text-lg font-semibold">PREVENTIVO</div>
         <div class="text-xs text-slate-500">Data: ${escapeHtml(
-          date || new Date().toLocaleDateString("it-IT", { timeZone: "Europe/Rome" })
+          date ||
+            new Date().toLocaleDateString("it-IT", { timeZone: "Europe/Rome" })
         )}</div>
       </div>
     </header>
