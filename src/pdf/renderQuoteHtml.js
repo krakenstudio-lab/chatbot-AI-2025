@@ -32,19 +32,35 @@ function toNumber(v) {
 }
 
 function sumLineItems(text) {
-  // bullet -/•, label (con o senza bold), separatore opzionale : o –, importo, € opzionale
-  const re =
-    /(?:^|\n|\s)[-•]\s*(?:\*\*|__)?[^:\n]+?(?:\*\*|__)?\s*(?:[:\-–]\s*)?([0-9][0-9\.,]*)\s*(?:€|euro)?\b/gi;
+  const src = String(text);
+
+  // pattern A: "€ 1.500,00" (valuta prima del numero)
+  const reBefore =
+    /(?:^|\n)\s*[-•–]\s*(?:\*\*|__)?[^:\n]+?(?:\*\*|__)?\s*(?:[:\-–]\s*)?(?:€|euro|EUR)\s*([0-9][\d\.,]*)(?!\s*%)(?!\s*-\s*\d)/gi;
+
+  // pattern B: "1.500,00 €" (valuta dopo il numero)
+  const reAfter =
+    /(?:^|\n)\s*[-•–]\s*(?:\*\*|__)?[^:\n]+?(?:\*\*|__)?\s*(?:[:\-–]\s*)?([0-9][\d\.,]*)\s*(?:€|euro|EUR)\b(?!\s*%)(?!\s*-\s*\d)/gi;
+
   let sum = 0,
     hit = false,
     m;
-  while ((m = re.exec(String(text)))) {
+
+  while ((m = reBefore.exec(src))) {
     const n = toNumber(m[1]);
     if (Number.isFinite(n)) {
       sum += n;
       hit = true;
     }
   }
+  while ((m = reAfter.exec(src))) {
+    const n = toNumber(m[1]);
+    if (Number.isFinite(n)) {
+      sum += n;
+      hit = true;
+    }
+  }
+
   return hit ? sum : null;
 }
 

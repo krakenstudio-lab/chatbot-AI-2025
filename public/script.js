@@ -7,6 +7,8 @@ const chatModal = document.getElementById("chatModal");
 const chatLauncher = document.getElementById("chatLauncher");
 const chatClose = document.getElementById("chatClose");
 
+const API_BASE = window.CHAT_API_BASE || "";
+
 // System prompt: intervista -> preventivo testuale (niente JSON)
 const systemPrompt = {
   role: "system",
@@ -326,7 +328,7 @@ function buildCustomerForm() {
         btn.textContent = "Generazione…";
 
         // HTML + Tailwind
-        const res = await fetch("/api/quote/pdf-from-html", {
+        const res = await fetch(`${API_BASE}/api/quote/pdf-from-html`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -401,7 +403,7 @@ async function onSend() {
   if (messages[0]?.role !== "system") messages.unshift(systemPrompt);
 
   try {
-    const res = await fetch("/api/chat", {
+    const res = await fetch(`${API_BASE}/api/chat`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ messages }),
