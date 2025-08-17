@@ -1,24 +1,41 @@
-// api/quote/pdf-from-html.js
-
-export const runtime = "nodejs";
-export const dynamic = "force-dynamic";
-
 const {
   generateQuotePdfFromHtml,
 } = require("../../src/pdf/generateQuotePdfFromHtml");
 
-export const config = {
-  maxDuration: 60,
-  memory: 1024,
-};
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
+export const config = { maxDuration: 60, memory: 1024 };
+
+const ALLOWED_ORIGINS = [
+  "https://vesewebdev.it",
+  "https://www.vesewebdev.it",
+  "https://chat.krakenstudio.it",
+];
+
+function setCors(req, res) {
+  const origin = req.headers.origin;
+  if (ALLOWED_ORIGINS.includes(origin)) {
+    res.setHeader("Access-Control-Allow-Origin", origin);
+  } else {
+    res.setHeader("Access-Control-Allow-Origin", "*");
+  }
+  res.setHeader("Vary", "Origin");
+  res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
+  res.setHeader("Access-Control-Max-Age", "86400");
+}
 
 export default async function handler(req, res) {
-  res.setHeader("Access-Control-Allow-Origin", "*");
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
-  res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
+  setCors(req, res);
+
+  if (req.method === "OPTIONS") {
+    return res.status(204).end();
+  }
+
   if (req.method !== "POST") {
     return res.status(405).json({ error: "Usa POST" });
   }
+
   try {
     const { customer, quoteText, meta } = req.body || {};
     if (!customer || typeof quoteText !== "string" || !quoteText.trim()) {
