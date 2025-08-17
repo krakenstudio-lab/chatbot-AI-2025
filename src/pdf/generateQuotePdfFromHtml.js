@@ -7,7 +7,7 @@ async function generateQuotePdfFromHtml(
 ) {
   const html = renderQuoteHtml({ agency, customer, quoteText, meta });
 
-  // Tentativo 1: ambiente serverless (Vercel, AWS Lambda)
+  // Tentativo 1: ambiente serverless (Vercel)
   try {
     const { default: chromium } = await import("@sparticuz/chromium");
     const { default: puppeteer } = await import("puppeteer-core");
@@ -15,14 +15,19 @@ async function generateQuotePdfFromHtml(
     const executablePath = await chromium.executablePath();
 
     const browser = await puppeteer.launch({
-      args: [...chromium.args, "--no-sandbox", "--disable-setuid-sandbox"],
       executablePath,
       headless: true,
+      args: [
+        ...chromium.args,
+        "--no-sandbox",
+        "--disable-setuid-sandbox",
+        "--disable-dev-shm-usage",
+      ],
       defaultViewport: chromium.defaultViewport ?? { width: 1280, height: 800 },
     });
 
     const page = await browser.newPage();
-    // Evita di “impantanarti” aspettando risorse esterne (CDN):
+    // Evita di restare appeso su risorse esterne (CDN):
     await page.setContent(html, { waitUntil: "load" });
 
     const pdfBuffer = await page.pdf({ format: "A4", printBackground: true });
@@ -36,8 +41,7 @@ async function generateQuotePdfFromHtml(
     return res.end(pdfBuffer);
   } catch (e1) {
     console.error("[PDF] Serverless launch failed:", e1?.stack || e1);
-
-    // Tentativo 2: ambiente “server” classico (VPS/Docker) con puppeteer normale
+    // (Facoltativo) Fallback locale solo su VPS/classic server:
     try {
       const puppeteer = require("puppeteer");
       const browser = await puppeteer.launch({
