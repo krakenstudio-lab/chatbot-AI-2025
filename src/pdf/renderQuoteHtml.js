@@ -25,6 +25,22 @@ function toNumber(v) {
   return null;
 }
 
+function sumLineItems(text) {
+  const re =
+    /(?:^|\n|\s)[-•]\s*(?:\*\*|__)?[^:\n]+?(?:\*\*|__)?\s*:\s*([0-9][0-9\.,]*)\s*(?:€|euro)\b/gi;
+  let sum = 0,
+    hit = false,
+    m;
+  while ((m = re.exec(String(text)))) {
+    const n = toNumber(m[1]);
+    if (Number.isFinite(n)) {
+      sum += n;
+      hit = true;
+    }
+  }
+  return hit ? sum : null;
+}
+
 function findMoneyAfter(labelRegex, text) {
   const re = new RegExp(
     // opzionale **bold**, label, eventuale **bold**, poi : o –,
@@ -75,7 +91,7 @@ function renderQuoteHtml({ agency, customer, quoteText, meta = {}, date }) {
   let nDiscount = toNumber(meta.discount);
   let nTotal = toNumber(meta.total);
 
-  // (opzionale ma consigliato) fallback dal testo
+  // fallback dal testo (etichette Subtotale/Sconto/Totale)
   if (typeof totalsFromText === "function") {
     const t = totalsFromText(quoteText || "");
     if (!Number.isFinite(nSubtotal) && Number.isFinite(t.subtotal))
@@ -85,12 +101,23 @@ function renderQuoteHtml({ agency, customer, quoteText, meta = {}, date }) {
     if (!Number.isFinite(nTotal) && Number.isFinite(t.total)) nTotal = t.total;
   }
 
-  // default sconto = 0 PRIMA dei calcoli dipendenti
+  // fallback: se manca il Subtotale ma ci sono righe con importi, prova a sommarle
+  if (!Number.isFinite(nSubtotal)) {
+    const itemsSum = sumLineItems(quoteText || "");
+    if (Number.isFinite(itemsSum)) nSubtotal = itemsSum;
+  }
+
+  // default sconto = 0
   if (!Number.isFinite(nDiscount)) nDiscount = 0;
 
   // se manca il subtotale ma abbiamo il totale, ricavalo
   if (!Number.isFinite(nSubtotal) && Number.isFinite(nTotal)) {
     nSubtotal = nTotal + nDiscount;
+  }
+
+  // se manca il totale ma abbiamo il subtotale, calcolalo
+  if (!Number.isFinite(nTotal) && Number.isFinite(nSubtotal)) {
+    nTotal = nSubtotal - nDiscount;
   }
 
   const subtotal = Number.isFinite(nSubtotal) ? currency(nSubtotal) : "—";
@@ -136,7 +163,7 @@ function renderQuoteHtml({ agency, customer, quoteText, meta = {}, date }) {
         <div class="text-[11px] uppercase tracking-wide text-slate-500">Documento</div>
         <div class="text-lg font-semibold">PREVENTIVO</div>
         <div class="text-xs text-slate-500">Data: ${escapeHtml(
-          date || ""
+          date || new Date().toLocaleDateString("it-IT", { timeZone: "Europe/Rome" })
         )}</div>
       </div>
     </header>
@@ -233,9 +260,9 @@ function renderQuoteHtml({ agency, customer, quoteText, meta = {}, date }) {
               <td class="py-2 px-3">Sconto</td>
               <td class="py-2 px-3 text-right">${discount}</td>
             </tr>
-            <tr class="border-t bg-slate-50 font-semibold">
-              <td class="py-2 px-3">Totale (IVA esclusa)</td>
-              <td class="py-2 px-3 text-right">${total}</td>
+            <tr class="border-t bg-slate-50">
+              <td class="py-3 px-3 font-semibold text-base">Totale (IVA esclusa)</td>
+              <td class="py-3 px-3 text-right font-bold text-base">${total}</td>
             </tr>
           </tbody>
         </table>

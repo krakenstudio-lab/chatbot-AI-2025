@@ -5,7 +5,13 @@ async function generateQuotePdfFromHtml(
   res,
   { agency, customer, quoteText, meta, filename }
 ) {
-  const html = renderQuoteHtml({ agency, customer, quoteText, meta });
+  const html = renderQuoteHtml({
+    agency,
+    customer,
+    quoteText,
+    meta,
+    date: new Date().toLocaleDateString("it-IT", { timeZone: "Europe/Rome" }),
+  });
 
   // Tentativo 1: ambiente serverless (Vercel)
   try {
