@@ -17,12 +17,13 @@ async function generateQuotePdfFromHtml(
     const browser = await puppeteer.launch({
       args: [...chromium.args, "--no-sandbox", "--disable-setuid-sandbox"],
       executablePath,
-      headless: true, // su Vercel va true
+      headless: true,
       defaultViewport: chromium.defaultViewport ?? { width: 1280, height: 800 },
     });
 
     const page = await browser.newPage();
-    await page.setContent(html, { waitUntil: "networkidle0" });
+    // Evita di “impantanarti” aspettando risorse esterne (CDN):
+    await page.setContent(html, { waitUntil: "load" });
 
     const pdfBuffer = await page.pdf({ format: "A4", printBackground: true });
     await browser.close();
@@ -44,7 +45,7 @@ async function generateQuotePdfFromHtml(
         args: ["--no-sandbox", "--disable-setuid-sandbox"],
       });
       const page = await browser.newPage();
-      await page.setContent(html, { waitUntil: "networkidle0" });
+      await page.setContent(html, { waitUntil: "load" });
       const pdfBuffer = await page.pdf({ format: "A4", printBackground: true });
       await browser.close();
 

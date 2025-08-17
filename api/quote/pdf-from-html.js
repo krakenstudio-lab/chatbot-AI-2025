@@ -1,4 +1,8 @@
 // api/quote/pdf-from-html.js
+
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
+
 const {
   generateQuotePdfFromHtml,
 } = require("../../src/pdf/generateQuotePdfFromHtml");
@@ -34,8 +38,9 @@ export default async function handler(req, res) {
     });
   } catch (err) {
     console.error("Errore /api/quote/pdf-from-html:", err);
-    return res
-      .status(500)
-      .json({ error: "Errore nella generazione del PDF (HTML)" });
+    return res.status(500).json({
+      error: "Errore nella generazione del PDF (HTML)",
+      details: String(err?.message || err),
+    });
   }
 }
