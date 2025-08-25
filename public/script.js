@@ -8,6 +8,7 @@ const chatLauncher = document.getElementById("chatLauncher");
 const chatClose = document.getElementById("chatClose");
 
 const API_BASE = window.CHAT_API_BASE || "";
+const CLIENT_KEY = window.CHAT_CLIENT_KEY || null;
 
 // System prompt: intervista -> preventivo testuale (niente JSON)
 const systemPrompt = {
@@ -328,6 +329,11 @@ function buildCustomerForm() {
         btn.textContent = "Generazione…";
 
         // HTML + Tailwind
+        const safeFilename = `preventivo-${(customer.name || "cliente")
+          .toLowerCase()
+          .replace(/\s+/g, "-")
+          .replace(/[^a-z0-9-_]+/g, "-")}.pdf`;
+
         const res = await fetch(`${API_BASE}/api/quote/pdf-from-html`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -335,6 +341,8 @@ function buildCustomerForm() {
             customer,
             quoteText: lastAssistantText,
             meta,
+            quoteId: window.__lastQuoteId || null, // <— IMPORTANTE
+            filename: safeFilename, // <— opzionale: suggerisci nome file
           }),
         });
         if (!res.ok) {
@@ -346,10 +354,7 @@ function buildCustomerForm() {
         const url = URL.createObjectURL(blob);
         const a = document.createElement("a");
         a.href = url;
-        a.download = `preventivo-${(customer.name || "cliente").replace(
-          /[^a-z0-9-_]+/gi,
-          "_"
-        )}.pdf`;
+        a.download = safeFilename
         document.body.appendChild(a);
         a.click();
         a.remove();
@@ -388,6 +393,41 @@ document.addEventListener("keydown", (e) => {
   }
 });
 
+async function saveQuoteIfFinal(aiText) {
+  try {
+    if (!CLIENT_KEY) return; // se non è impostata, esci
+    if (!shouldEnablePdf(aiText)) return; // non è finale? esci
+
+    const finalJson = extractFinalJsonBlock(aiText); // blocco ```json ... ```
+
+    const payload = {
+      clientKey: CLIENT_KEY,
+      customer: null, // i dati cliente arrivano dopo, al PDF
+      quoteText: aiText,
+      finalJson,
+      siteUrl: location.href,
+      chatHistory: chatHistory.slice(-20), // opzionale: ultime N battute
+    };
+
+    const res = await fetch(`${API_BASE}/api/quote/save`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+
+    if (res.ok) {
+      const data = await res.json();
+      window.__lastQuoteId = data.id; // usato poi in /api/quote/pdf-from-html
+      window.__lastQuoteUid = data.uid;
+    } else {
+      // non bloccare il flusso utente se il salvataggio fallisce
+      console.warn("saveQuoteIfFinal failed:", await res.text());
+    }
+  } catch (e) {
+    console.warn("saveQuoteIfFinal error:", e);
+  }
+}
+
 async function onSend() {
   const text = promptInput.value.trim();
   if (!text) return alert("Inserisci un messaggio!");
@@ -417,6 +457,8 @@ async function onSend() {
     // SOLO se sembra un preventivo finale con prezzi, abilita il bottone PDF
     if (shouldEnablePdf(aiText)) {
       lastAssistantText = aiText;
+      window.__chatHistory = chatHistory.slice(-50); // opzionale
+      await saveQuoteIfFinal(aiText); // <— SALVA nel DB
     }
 
     renderChat();

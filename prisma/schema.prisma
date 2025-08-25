@@ -13,12 +13,79 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+// ===== Enums =====
+enum ClientStatus {
+  active
+  disabled
+}
+
+enum QuoteStatus {
+  draft
+  final
+  pdf_generated
+  sent
+  accepted
+  rejected
+}
+
+// ===== Models =====
+model Client {
+  id             String       @id @default(cuid())
+  name           String
+  embedKey       String       @unique // usato dallo snippet per identificare il tenant
+  allowedOrigins Json? // es. ["https://www.sito-del-cliente.it"]
+  status         ClientStatus @default(active)
+  createdAt      DateTime     @default(now())
+
+  quotes Quote[]
+}
+
+model Quote {
+  id       String @id @default(cuid())
+  uid      String @unique // short code pubblico/esterno
+  clientId String
+  client   Client @relation(fields: [clientId], references: [id])
+
+  customerName  String?
+  customerEmail String?
+  customerPhone String?
+  siteUrl       String?
+
+  package      String?
+  subtotal     Decimal? @db.Decimal(10, 2)
+  discount     Decimal? @db.Decimal(10, 2)
+  total        Decimal? @db.Decimal(10, 2)
+  currency     String   @default("EUR")
+  deliveryTime String?
+  validityDays Int?
+
+  quoteText   String @db.LongText
+  jsonFinal   Json?
+  chatHistory Json?
+
+  status         QuoteStatus @default(final)
+  pdfGeneratedAt DateTime?
+
+  ip        String? @db.VarChar(45)
+  userAgent String? @db.Text
+
+  // collega un PDF salvato (facoltativo) al preventivo
+  storedPdfId String?
+  storedPdf   StoredPdfDb? @relation(fields: [storedPdfId], references: [id])
+
+  createdAt DateTime @default(now())
+
+  @@index([clientId, createdAt])
+}
+
+// tuo modello esistente (lo cito per contesto, non serve modificarlo)
 model StoredPdfDb {
   id          String   @id @default(cuid())
   filename    String
   contentType String   @default("application/pdf")
-  bytes       Bytes // LONGBLOB
+  bytes       Bytes
   size        Int
   chatId      String?
   createdAt   DateTime @default(now())
+  Quote       Quote[]
 }
