@@ -1,7 +1,7 @@
 // src/pdf/generateQuotePdfFromHtml.js
 const { renderQuoteHtml } = require("./renderQuoteHtml");
 
-export async function generateQuotePdfFromHtml(
+async function generateQuotePdfFromHtml(
   res,
   { agency, customer, quoteText, meta, filename }
 ) {
@@ -13,13 +13,11 @@ export async function generateQuotePdfFromHtml(
     date: new Date().toLocaleDateString("it-IT", { timeZone: "Europe/Rome" }),
   });
 
-  // Tentativo 1: ambiente serverless (Vercel)
   try {
     const { default: chromium } = await import("@sparticuz/chromium");
     const { default: puppeteer } = await import("puppeteer-core");
 
     const executablePath = await chromium.executablePath();
-
     const browser = await puppeteer.launch({
       executablePath,
       headless: true,
@@ -33,21 +31,19 @@ export async function generateQuotePdfFromHtml(
     });
 
     const page = await browser.newPage();
-    // Evita di restare appeso su risorse esterne (CDN):
     await page.setContent(html, { waitUntil: "load" });
-
     const pdfBuffer = await page.pdf({ format: "A4", printBackground: true });
     await browser.close();
 
+    const outName = String(filename).toLowerCase().endsWith(".pdf")
+      ? filename
+      : `${filename}.pdf`;
+
     res.setHeader("Content-Type", "application/pdf");
-    res.setHeader(
-      "Content-Disposition",
-      `attachment; filename="${filename}.pdf"`
-    );
+    res.setHeader("Content-Disposition", `attachment; filename="${outName}"`);
     return res.end(pdfBuffer);
   } catch (e1) {
     console.error("[PDF] Serverless launch failed:", e1?.stack || e1);
-    // (Facoltativo) Fallback locale solo su VPS/classic server:
     try {
       const puppeteer = require("puppeteer");
       const browser = await puppeteer.launch({
@@ -59,11 +55,12 @@ export async function generateQuotePdfFromHtml(
       const pdfBuffer = await page.pdf({ format: "A4", printBackground: true });
       await browser.close();
 
+      const outName = String(filename).toLowerCase().endsWith(".pdf")
+        ? filename
+        : `${filename}.pdf`;
+
       res.setHeader("Content-Type", "application/pdf");
-      res.setHeader(
-        "Content-Disposition",
-        `attachment; filename="${filename}.pdf"`
-      );
+      res.setHeader("Content-Disposition", `attachment; filename="${outName}"`);
       return res.end(pdfBuffer);
     } catch (e2) {
       console.error("[PDF] Fallback launch failed:", e2?.stack || e2);
@@ -71,3 +68,5 @@ export async function generateQuotePdfFromHtml(
     }
   }
 }
+
+module.exports = { generateQuotePdfFromHtml };

@@ -1,14 +1,9 @@
 // api/quote/pdf-from-html.js
-import { PrismaClient } from "@prisma/client";
-import { generateQuotePdfFromHtml } from "../../src/pdf/generateQuotePdfFromHtml.js";
-
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const config = { maxDuration: 60, memory: 1024 };
 
-const prisma = globalThis.__prisma || new PrismaClient();
-if (!globalThis.__prisma) globalThis.__prisma = prisma;
-
+// ===== CORS base =====
 const ALLOWED_ORIGINS = [
   "https://vesewebdev.it",
   "https://www.vesewebdev.it",
@@ -33,10 +28,23 @@ function setCors(req, res) {
     reqHeaders || "Content-Type, Authorization"
   );
   res.setHeader("Access-Control-Max-Age", "86400");
-  // importante per poter leggere il filename dal browser (e alcuni browser sono pignoli)
   res.setHeader("Access-Control-Expose-Headers", "Content-Disposition");
 }
 
+// ===== Prisma lazy =====
+let __prisma = null;
+async function getPrisma() {
+  if (__prisma) return __prisma;
+  const mod = await import("@prisma/client");
+  __prisma = new mod.PrismaClient();
+  return __prisma;
+}
+
+// ===== PDF helper (CJS) via default import =====
+import pdfHelper from "../../src/pdf/generateQuotePdfFromHtml.js";
+const { generateQuotePdfFromHtml } = pdfHelper;
+
+// ===== utils =====
 function toSafeSlug(value, fallback = "cliente") {
   const base = String(value || fallback)
     .toLowerCase()
@@ -62,12 +70,15 @@ export default async function handler(req, res) {
         .json({ error: "Servono `customer` e `quoteText`." });
     }
 
-    const safeName =
+    // normalizza filename: passiamo al renderer un nome SENZA .pdf; lui la aggiunge se manca
+    const baseName =
       filename && String(filename).trim() !== ""
-        ? String(filename).trim()
-        : `preventivo-${toSafeSlug(customer.name)}.pdf`;
+        ? String(filename)
+            .trim()
+            .replace(/\.pdf$/i, "")
+        : `preventivo-${toSafeSlug(customer.name)}`;
 
-    // Genera e streamma il PDF
+    // Stream PDF (se va a buon fine, gli header sono già inviati)
     await generateQuotePdfFromHtml(res, {
       agency: {
         name: process.env.AGENCY_NAME || "La tua Web Agency",
@@ -78,19 +89,20 @@ export default async function handler(req, res) {
       customer,
       quoteText,
       meta: meta || {},
-      filename: safeName,
+      filename: baseName,
     });
 
-    // Dopo l'invio del PDF, aggiorno best-effort lo stato
+    // Best-effort: aggiorna stato preventivo dopo l'invio
     if (quoteId) {
-      prisma.quote
-        .update({
+      try {
+        const prisma = await getPrisma();
+        await prisma.quote.update({
           where: { id: String(quoteId) },
           data: { status: "pdf_generated", pdfGeneratedAt: new Date() },
-        })
-        .catch((e) =>
-          console.error("Impossibile aggiornare lo stato del preventivo:", e)
-        );
+        });
+      } catch (e) {
+        console.warn("Impossibile aggiornare lo stato del preventivo:", e);
+      }
     }
     return;
   } catch (err) {

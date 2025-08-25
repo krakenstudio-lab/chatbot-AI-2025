@@ -1,17 +1,9 @@
 // api/quote/save.js
-import { PrismaClient, Prisma } from "@prisma/client";
-import { customAlphabet } from "nanoid/non-secure";
-
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const config = { maxDuration: 60, memory: 1024 };
 
-const prisma = globalThis.__prisma || new PrismaClient();
-if (!globalThis.__prisma) globalThis.__prisma = prisma;
-
-const nanoid = customAlphabet("23456789ABCDEFGHJKLMNPQRSTUVWXYZ", 12);
-
-// Allow-list STATIC per la preflight (OPTIONS) — la POST avrà anche il check dinamico da DB
+// ===== CORS base (preflight sempre OK) =====
 const ALLOWED_ORIGINS = [
   "https://vesewebdev.it",
   "https://www.vesewebdev.it",
@@ -22,12 +14,11 @@ function setCors(req, res) {
   const origin = req.headers.origin || "";
   const reqHeaders = req.headers["access-control-request-headers"];
 
-  // Per la preflight facciamo passare SEMPRE con ACAO valorizzato
   if (ALLOWED_ORIGINS.includes(origin)) {
     res.setHeader("Access-Control-Allow-Origin", origin);
     res.setHeader("Access-Control-Allow-Credentials", "true");
   } else {
-    // Non usiamo credenziali, quindi '*' va bene per sbloccare la preflight
+    // niente credenziali → '*' va bene per la preflight
     res.setHeader("Access-Control-Allow-Origin", "*");
   }
 
@@ -38,13 +29,47 @@ function setCors(req, res) {
     reqHeaders || "Content-Type, Authorization"
   );
   res.setHeader("Access-Control-Max-Age", "86400");
-  // Per safety, esponiamo intestazioni utili (anche se qui non servono)
   res.setHeader("Access-Control-Expose-Headers", "Content-Disposition");
 }
 
-export default async function handler(req, res) {
-  setCors(req, res);
+// ===== Prisma lazy =====
+let __prisma = null;
+let __PrismaNS = null;
+async function getPrisma() {
+  if (__prisma) return { prisma: __prisma, Prisma: __PrismaNS };
+  const mod = await import("@prisma/client");
+  __PrismaNS = mod.Prisma;
+  __prisma = new mod.PrismaClient();
+  return { prisma: __prisma, Prisma: __PrismaNS };
+}
 
+// ===== nanoid (opzionale) con fallback =====
+const ALPHABET = "23456789ABCDEFGHJKLMNPQRSTUVWXYZ";
+async function getIdGenerator() {
+  try {
+    const { customAlphabet } = await import("nanoid/non-secure");
+    return customAlphabet(ALPHABET, 12);
+  } catch {
+    // fallback senza dipendenze
+    const { randomInt } = await import("node:crypto").catch(() => ({
+      randomInt: null,
+    }));
+    return (size = 12) => {
+      let out = "";
+      for (let i = 0; i < size; i++) {
+        const idx = randomInt
+          ? randomInt(ALPHABET.length)
+          : Math.floor(Math.random() * ALPHABET.length);
+        out += ALPHABET[idx];
+      }
+      return out;
+    };
+  }
+}
+
+export default async function handler(req, res) {
+  // CORS prima di tutto
+  setCors(req, res);
   if (req.method === "OPTIONS") return res.status(204).end();
   if (req.method !== "POST")
     return res.status(405).json({ error: "Method not allowed" });
@@ -67,13 +92,16 @@ export default async function handler(req, res) {
       return res.status(400).json({ error: "Missing clientKey or quoteText" });
     }
 
+    // Prisma solo ora (dopo header CORS)
+    const { prisma, Prisma } = await getPrisma();
+
     // 1) Client lookup
     const client = await prisma.client.findFirst({
       where: { embedKey: clientKey, status: "active" },
     });
     if (!client) return res.status(401).json({ error: "Invalid clientKey" });
 
-    // 2) CORS dinamico sulla POST in base a allowedOrigins del client
+    // 2) CORS dinamico sulla POST in base a allowedOrigins nel DB
     const allowed = Array.isArray(client.allowedOrigins)
       ? client.allowedOrigins
       : [];
@@ -82,12 +110,15 @@ export default async function handler(req, res) {
     }
 
     // 3) Persist
-    const t = finalJson || {};
+    const idgen = await getIdGenerator();
+    const uid = idgen();
+
     const toDec = (v) =>
       v === null || v === undefined || v === "" ? null : new Prisma.Decimal(v);
 
+    const t = finalJson || {};
     const data = {
-      uid: nanoid(),
+      uid,
       client: { connect: { id: client.id } },
       customerName: customer?.name ?? null,
       customerEmail: customer?.email ?? null,
