@@ -1,14 +1,13 @@
 // api/quote/pdf-from-html.js
-const {
-  generateQuotePdfFromHtml,
-} = require("../../src/pdf/generateQuotePdfFromHtml");
-const { PrismaClient } = require("@prisma/client");
+import { PrismaClient } from "@prisma/client";
+import { generateQuotePdfFromHtml } from "../../src/pdf/generateQuotePdfFromHtml.js";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const config = { maxDuration: 60, memory: 1024 };
 
-const prisma = new PrismaClient();
+const prisma = globalThis.__prisma || new PrismaClient();
+if (!globalThis.__prisma) globalThis.__prisma = prisma;
 
 const ALLOWED_ORIGINS = [
   "https://vesewebdev.it",
@@ -23,6 +22,8 @@ function setCors(req, res) {
   if (ALLOWED_ORIGINS.includes(origin)) {
     res.setHeader("Access-Control-Allow-Origin", origin);
     res.setHeader("Access-Control-Allow-Credentials", "true");
+  } else {
+    res.setHeader("Access-Control-Allow-Origin", "*");
   }
 
   res.setHeader("Vary", "Origin, Access-Control-Request-Headers");
@@ -32,6 +33,8 @@ function setCors(req, res) {
     reqHeaders || "Content-Type, Authorization"
   );
   res.setHeader("Access-Control-Max-Age", "86400");
+  // importante per poter leggere il filename dal browser (e alcuni browser sono pignoli)
+  res.setHeader("Access-Control-Expose-Headers", "Content-Disposition");
 }
 
 function toSafeSlug(value, fallback = "cliente") {
@@ -62,9 +65,9 @@ export default async function handler(req, res) {
     const safeName =
       filename && String(filename).trim() !== ""
         ? String(filename).trim()
-        : `preventivo-${toSafeSlug(customer.name)}`;
+        : `preventivo-${toSafeSlug(customer.name)}.pdf`;
 
-    // 1) Generate and stream PDF (sets Content-Type & Content-Disposition)
+    // Genera e streamma il PDF
     await generateQuotePdfFromHtml(res, {
       agency: {
         name: process.env.AGENCY_NAME || "La tua Web Agency",
@@ -78,7 +81,7 @@ export default async function handler(req, res) {
       filename: safeName,
     });
 
-    // 2) After response is flushed, best-effort DB update
+    // Dopo l'invio del PDF, aggiorno best-effort lo stato
     if (quoteId) {
       prisma.quote
         .update({

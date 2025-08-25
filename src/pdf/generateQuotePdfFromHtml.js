@@ -1,7 +1,7 @@
 // src/pdf/generateQuotePdfFromHtml.js
 const { renderQuoteHtml } = require("./renderQuoteHtml");
 
-async function generateQuotePdfFromHtml(
+export async function generateQuotePdfFromHtml(
   res,
   { agency, customer, quoteText, meta, filename }
 ) {
@@ -71,5 +71,3 @@ async function generateQuotePdfFromHtml(
     }
   }
 }
-
-module.exports = { generateQuotePdfFromHtml };
