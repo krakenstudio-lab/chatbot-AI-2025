@@ -17,7 +17,7 @@ model StoredPdfDb {
   id          String   @id @default(cuid())
   filename    String
   contentType String   @default("application/pdf")
-  bytes       Bytes    // LONGBLOB
+  bytes       Bytes // LONGBLOB
   size        Int
   chatId      String?
   createdAt   DateTime @default(now())
