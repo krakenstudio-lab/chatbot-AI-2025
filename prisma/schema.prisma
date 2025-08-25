@@ -6,10 +6,19 @@
 
 generator client {
   provider = "prisma-client-js"
-  output   = "../src/generated/prisma"
 }
 
 datasource db {
   provider = "mysql"
   url      = env("DATABASE_URL")
+}
+
+model StoredPdfDb {
+  id          String   @id @default(cuid())
+  filename    String
+  contentType String   @default("application/pdf")
+  bytes       Bytes    // LONGBLOB
+  size        Int
+  chatId      String?
+  createdAt   DateTime @default(now())
 }
