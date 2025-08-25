@@ -8,8 +8,7 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const config = { maxDuration: 60, memory: 1024 };
 
-const prisma = global.__prisma || new PrismaClient();
-if (process.env.NODE_ENV !== "production") global.__prisma = prisma;
+const prisma = new PrismaClient();
 
 const ALLOWED_ORIGINS = [
   "https://vesewebdev.it",
@@ -18,15 +17,20 @@ const ALLOWED_ORIGINS = [
 ];
 
 function setCors(req, res) {
-  const origin = req.headers.origin;
+  const origin = req.headers.origin || "";
+  const reqHeaders = req.headers["access-control-request-headers"];
+
   if (ALLOWED_ORIGINS.includes(origin)) {
     res.setHeader("Access-Control-Allow-Origin", origin);
-  } else {
-    res.setHeader("Access-Control-Allow-Origin", "*");
+    res.setHeader("Access-Control-Allow-Credentials", "true");
   }
-  res.setHeader("Vary", "Origin");
+
+  res.setHeader("Vary", "Origin, Access-Control-Request-Headers");
   res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
+  res.setHeader(
+    "Access-Control-Allow-Headers",
+    reqHeaders || "Content-Type, Authorization"
+  );
   res.setHeader("Access-Control-Max-Age", "86400");
 }
 
@@ -44,13 +48,8 @@ function toSafeSlug(value, fallback = "cliente") {
 export default async function handler(req, res) {
   setCors(req, res);
 
-  if (req.method === "OPTIONS") {
-    return res.status(204).end();
-  }
-
-  if (req.method !== "POST") {
-    return res.status(405).json({ error: "Usa POST" });
-  }
+  if (req.method === "OPTIONS") return res.status(204).end();
+  if (req.method !== "POST") return res.status(405).json({ error: "Usa POST" });
 
   try {
     const { customer, quoteText, meta, quoteId, filename } = req.body || {};
@@ -65,7 +64,7 @@ export default async function handler(req, res) {
         ? String(filename).trim()
         : `preventivo-${toSafeSlug(customer.name)}`;
 
-    // 1) Genera e invia il PDF come risposta (Content-Disposition: attachment)
+    // 1) Generate and stream PDF (sets Content-Type & Content-Disposition)
     await generateQuotePdfFromHtml(res, {
       agency: {
         name: process.env.AGENCY_NAME || "La tua Web Agency",
@@ -79,30 +78,25 @@ export default async function handler(req, res) {
       filename: safeName,
     });
 
-    // ATTENZIONE: a questo punto la risposta è stata inviata.
-    // 2) Se ho un quoteId, aggiorno lo stato del preventivo -> pdf_generated
+    // 2) After response is flushed, best-effort DB update
     if (quoteId) {
-      try {
-        await prisma.quote.update({
+      prisma.quote
+        .update({
           where: { id: String(quoteId) },
           data: { status: "pdf_generated", pdfGeneratedAt: new Date() },
-        });
-      } catch (e) {
-        // Non interrompere la funzione: il PDF è già stato inviato all'utente
-        console.error("Impossibile aggiornare lo stato del preventivo:", e);
-      }
+        })
+        .catch((e) =>
+          console.error("Impossibile aggiornare lo stato del preventivo:", e)
+        );
     }
-    // Non fare ulteriori res.* qui.
     return;
   } catch (err) {
     console.error("Errore /api/quote/pdf-from-html:", err);
-    // Se non abbiamo ancora scritto la risposta, inviamo errore JSON
     if (!res.headersSent) {
       return res.status(500).json({
         error: "Errore nella generazione del PDF (HTML)",
         details: String(err?.message || err),
       });
     }
-    // Se le intestazioni sono già state inviate, non possiamo più scrivere sul response.
   }
 }

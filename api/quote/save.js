@@ -2,32 +2,49 @@
 import { PrismaClient, Prisma } from "@prisma/client";
 import { customAlphabet } from "nanoid/non-secure";
 
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
+export const config = { maxDuration: 60, memory: 1024 };
+
 const prisma = new PrismaClient();
-// short UID leggibile (A-Z + 0-9 senza ambiguità), 10-12 char
 const nanoid = customAlphabet("23456789ABCDEFGHJKLMNPQRSTUVWXYZ", 12);
 
-function ok(res, body, origin) {
-  if (origin) res.setHeader("Access-Control-Allow-Origin", origin);
-  res.setHeader("Access-Control-Allow-Credentials", "true");
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
-  res.setHeader("Access-Control-Allow-Methods", "POST,OPTIONS");
-  return res.status(200).json(body);
-}
-function err(res, code, body, origin) {
-  if (origin) res.setHeader("Access-Control-Allow-Origin", origin);
-  res.setHeader("Access-Control-Allow-Credentials", "true");
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
-  res.setHeader("Access-Control-Allow-Methods", "POST,OPTIONS");
-  return res.status(code).json(body);
+// Preflight allow-list (static) so OPTIONS succeeds even senza body/clientKey
+const ALLOWED_ORIGINS = [
+  "https://vesewebdev.it",
+  "https://www.vesewebdev.it",
+  "https://chat.krakenstudio.it",
+];
+
+function setCors(req, res) {
+  const origin = req.headers.origin || "";
+  const reqHeaders = req.headers["access-control-request-headers"];
+
+  // Mirror only if in our allow-list (no "*", so creds are OK if ever needed)
+  if (ALLOWED_ORIGINS.includes(origin)) {
+    res.setHeader("Access-Control-Allow-Origin", origin);
+    res.setHeader("Access-Control-Allow-Credentials", "true");
+  }
+
+  res.setHeader("Vary", "Origin, Access-Control-Request-Headers");
+  res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
+  res.setHeader(
+    "Access-Control-Allow-Headers",
+    reqHeaders || "Content-Type, Authorization"
+  );
+  res.setHeader("Access-Control-Max-Age", "86400");
 }
 
 export default async function handler(req, res) {
-  const origin = req.headers.origin || "";
-  if (req.method === "OPTIONS") return ok(res, { ok: true }, origin);
+  setCors(req, res);
+
+  // Important: answer preflight early with headers already set
+  if (req.method === "OPTIONS") return res.status(204).end();
   if (req.method !== "POST")
-    return err(res, 405, { error: "Method not allowed" }, origin);
+    return res.status(405).json({ error: "Method not allowed" });
 
   try {
+    const origin = req.headers.origin || "";
     const ip = (
       req.headers["x-forwarded-for"] ||
       req.socket?.remoteAddress ||
@@ -40,24 +57,26 @@ export default async function handler(req, res) {
 
     const { clientKey, customer, quoteText, finalJson, siteUrl, chatHistory } =
       req.body || {};
-    if (!clientKey || !quoteText)
-      return err(res, 400, { error: "Missing clientKey or quoteText" }, origin);
+    if (!clientKey || !quoteText) {
+      return res.status(400).json({ error: "Missing clientKey or quoteText" });
+    }
 
-    // 1) client
+    // 1) Client lookup
     const client = await prisma.client.findFirst({
       where: { embedKey: clientKey, status: "active" },
     });
-    if (!client) return err(res, 401, { error: "Invalid clientKey" }, origin);
+    if (!client) return res.status(401).json({ error: "Invalid clientKey" });
 
-    // 2) CORS restrittivo se configurato
+    // 2) Dynamic CORS check based on client.allowedOrigins (POST only)
     const allowed = Array.isArray(client.allowedOrigins)
       ? client.allowedOrigins
       : [];
     if (allowed.length && origin && !allowed.includes(origin)) {
-      return err(res, 403, { error: "Origin not allowed" }, origin);
+      // headers are already set by setCors; this 403 will be a normal fetch error (not a CORS error)
+      return res.status(403).json({ error: "Origin not allowed" });
     }
 
-    // 3) estrai totali (gestisci decimal come string/Decimal)
+    // 3) Persist
     const t = finalJson || {};
     const toDec = (v) =>
       v === null || v === undefined || v === "" ? null : new Prisma.Decimal(v);
@@ -79,8 +98,8 @@ export default async function handler(req, res) {
       validityDays: Number.isFinite(t.validityDays) ? t.validityDays : null,
 
       quoteText,
-      jsonFinal: finalJson || Prisma.JsonNull,
-      chatHistory: chatHistory || Prisma.JsonNull,
+      jsonFinal: finalJson ?? Prisma.JsonNull,
+      chatHistory: chatHistory ?? Prisma.JsonNull,
 
       status: "final",
       ip,
@@ -88,9 +107,9 @@ export default async function handler(req, res) {
     };
 
     const created = await prisma.quote.create({ data });
-    return ok(res, { id: created.id, uid: created.uid }, origin);
+    return res.status(200).json({ id: created.id, uid: created.uid });
   } catch (e) {
     console.error("quote/save error:", e);
-    return err(res, 500, { error: "Server error" }, origin);
+    return res.status(500).json({ error: "Server error" });
   }
 }
