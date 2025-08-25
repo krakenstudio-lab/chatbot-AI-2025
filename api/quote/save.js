@@ -43,28 +43,73 @@ async function getPrisma() {
   return { prisma: __prisma, Prisma: __PrismaNS };
 }
 
-// ===== nanoid (opzionale) con fallback =====
-const ALPHABET = "23456789ABCDEFGHJKLMNPQRSTUVWXYZ";
-async function getIdGenerator() {
-  try {
-    const { customAlphabet } = await import("nanoid/non-secure");
-    return customAlphabet(ALPHABET, 12);
-  } catch {
-    // fallback senza dipendenze
-    const { randomInt } = await import("node:crypto").catch(() => ({
-      randomInt: null,
-    }));
-    return (size = 12) => {
-      let out = "";
-      for (let i = 0; i < size; i++) {
-        const idx = randomInt
-          ? randomInt(ALPHABET.length)
-          : Math.floor(Math.random() * ALPHABET.length);
-        out += ALPHABET[idx];
-      }
-      return out;
-    };
+// ===== Helpers parsing dal testo =====
+function parseEuroToNumber(v) {
+  if (v == null) return null;
+  if (typeof v === "number" && Number.isFinite(v)) return v;
+  if (typeof v !== "string") return null;
+  const n = Number(
+    v.replace(/\s/g, "").replace(/\./g, "").replace(",", ".").replace(/€/g, "")
+  );
+  return Number.isFinite(n) ? n : null;
+}
+function findNumberAfter(labelRegex, text) {
+  const re = new RegExp(
+    labelRegex +
+      "\\s*[:\\-–]?\\s*(?:\\*\\*|__)?\\s*€?\\s*([\\d\\.,]+)(?!\\s*%)(?!\\s*-)",
+    "i"
+  );
+  const m = String(text || "").match(re);
+  return m ? parseEuroToNumber(m[1]) : null;
+}
+function sumLineItems(text) {
+  const re =
+    /(?:^|\n|\s)[-•]\s*(?:\*\*|__)?[^:\n]+?(?:\*\*|__)?\s*:\s*([0-9][0-9\.,]*)\s*(?:€|euro)\b/gi;
+  let sum = 0,
+    hit = false,
+    m;
+  while ((m = re.exec(String(text || "")))) {
+    const n = parseEuroToNumber(m[1]);
+    if (Number.isFinite(n)) {
+      sum += n;
+      hit = true;
+    }
   }
+  return hit ? sum : null;
+}
+function buildMetaFromText(text) {
+  const subtotalFromLabel = findNumberAfter(
+    "(?:sub\\s*totale|subtotale)",
+    text
+  );
+  const discountFromLabel = findNumberAfter("sconto", text);
+  const totalFromLabel = findNumberAfter("totale(?:\\s*finale)?", text);
+  const itemsSum = sumLineItems(text);
+
+  let subtotal = subtotalFromLabel ?? itemsSum;
+  let discount = discountFromLabel ?? 0;
+  let total = totalFromLabel;
+
+  if (!Number.isFinite(total) && Number.isFinite(subtotal)) {
+    total = subtotal - (Number.isFinite(discount) ? discount : 0);
+  }
+  if (
+    Number.isFinite(total) &&
+    Number.isFinite(subtotal) &&
+    total < subtotal * 0.2
+  ) {
+    total = subtotal - (Number.isFinite(discount) ? discount : 0);
+  }
+
+  return {
+    subtotal: Number.isFinite(subtotal) ? subtotal : null,
+    discount: Number.isFinite(discount) ? discount : null,
+    total: Number.isFinite(total) ? total : null,
+  };
+}
+function inferPackageFromText(text) {
+  const m = String(text || "").match(/\b(Start|Pro|Leader)\b/i);
+  return m ? m[1][0].toUpperCase() + m[1].slice(1).toLowerCase() : null;
 }
 
 export default async function handler(req, res) {
@@ -109,29 +154,40 @@ export default async function handler(req, res) {
       return res.status(403).json({ error: "Origin not allowed" });
     }
 
-    // 3) Persist
-    const idgen = await getIdGenerator();
-    const uid = idgen();
+    // 3) Persist (con fallback: se manca JSON, inferisci dal testo)
+    const t = finalJson || {};
+    const guessed = buildMetaFromText(quoteText);
+    const pkg = t.package || inferPackageFromText(quoteText);
 
     const toDec = (v) =>
       v === null || v === undefined || v === "" ? null : new Prisma.Decimal(v);
 
-    const t = finalJson || {};
     const data = {
-      uid,
+      uid:
+        Math.random().toString(36).slice(2, 7).toUpperCase() +
+        Math.random().toString(36).slice(2, 7).toUpperCase(),
       client: { connect: { id: client.id } },
+
+      // NB: qui spesso customer è null (verrà aggiornato al PDF)
       customerName: customer?.name ?? null,
       customerEmail: customer?.email ?? null,
       customerPhone: customer?.phone ?? null,
       siteUrl: siteUrl ?? null,
 
-      package: t.package ?? null,
-      subtotal: toDec(t.subtotal),
-      discount: toDec(t.discount),
-      total: toDec(t.total),
+      package: pkg ?? null,
+      subtotal: toDec(
+        Number.isFinite(t.subtotal) ? t.subtotal : guessed.subtotal
+      ),
+      discount: toDec(
+        Number.isFinite(t.discount) ? t.discount : guessed.discount
+      ),
+      total: toDec(Number.isFinite(t.total) ? t.total : guessed.total),
       currency: t.currency ?? "EUR",
       deliveryTime: t.deliveryTime ?? null,
-      validityDays: Number.isFinite(t.validityDays) ? t.validityDays : null,
+      validityDays:
+        Number.isFinite(t.validityDays) && t.validityDays >= 0
+          ? t.validityDays
+          : null,
 
       quoteText,
       jsonFinal: finalJson ?? Prisma.JsonNull,

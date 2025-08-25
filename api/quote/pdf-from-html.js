@@ -33,16 +33,18 @@ function setCors(req, res) {
 
 // ===== Prisma lazy =====
 let __prisma = null;
+let __PrismaNS = null;
 async function getPrisma() {
-  if (__prisma) return __prisma;
+  if (__prisma) return { prisma: __prisma, Prisma: __PrismaNS };
   const mod = await import("@prisma/client");
+  __PrismaNS = mod.Prisma;
   __prisma = new mod.PrismaClient();
-  return __prisma;
+  return { prisma: __prisma, Prisma: __PrismaNS };
 }
 
-// ===== PDF helper (CJS) via default import =====
-import pdfHelper from "../../src/pdf/generateQuotePdfFromHtml.js";
-const { generateQuotePdfFromHtml } = pdfHelper;
+// ===== Import render HTML (CJS) =====
+import renderHelper from "../../src/pdf/renderQuoteHtml.js";
+const { renderQuoteHtml } = renderHelper;
 
 // ===== utils =====
 function toSafeSlug(value, fallback = "cliente") {
@@ -54,6 +56,47 @@ function toSafeSlug(value, fallback = "cliente") {
     .replace(/[^a-z0-9-_]+/g, "-")
     .replace(/-+/g, "-")
     .replace(/^-|-$/g, "");
+}
+
+async function makePdfBuffer(html) {
+  try {
+    const { default: chromium } = await import("@sparticuz/chromium");
+    const { default: puppeteer } = await import("puppeteer-core");
+    const executablePath = await chromium.executablePath();
+
+    const browser = await puppeteer.launch({
+      executablePath,
+      headless: true,
+      args: [
+        ...chromium.args,
+        "--no-sandbox",
+        "--disable-setuid-sandbox",
+        "--disable-dev-shm-usage",
+      ],
+      defaultViewport: chromium.defaultViewport ?? { width: 1280, height: 800 },
+    });
+
+    const page = await browser.newPage();
+    await page.setContent(html, { waitUntil: "load" });
+    const pdfBuffer = await page.pdf({ format: "A4", printBackground: true });
+    await browser.close();
+    return pdfBuffer;
+  } catch (e1) {
+    console.error(
+      "[PDF] serverless path failed, trying fallback:",
+      e1?.stack || e1
+    );
+    const puppeteer = (await import("puppeteer")).default;
+    const browser = await puppeteer.launch({
+      headless: "new",
+      args: ["--no-sandbox", "--disable-setuid-sandbox"],
+    });
+    const page = await browser.newPage();
+    await page.setContent(html, { waitUntil: "load" });
+    const pdfBuffer = await page.pdf({ format: "A4", printBackground: true });
+    await browser.close();
+    return pdfBuffer;
+  }
 }
 
 export default async function handler(req, res) {
@@ -70,16 +113,16 @@ export default async function handler(req, res) {
         .json({ error: "Servono `customer` e `quoteText`." });
     }
 
-    // normalizza filename: passiamo al renderer un nome SENZA .pdf; lui la aggiunge se manca
     const baseName =
       filename && String(filename).trim() !== ""
         ? String(filename)
             .trim()
             .replace(/\.pdf$/i, "")
         : `preventivo-${toSafeSlug(customer.name)}`;
+    const outName = `${baseName}.pdf`;
 
-    // Stream PDF (se va a buon fine, gli header sono già inviati)
-    await generateQuotePdfFromHtml(res, {
+    // 1) HTML
+    const html = renderQuoteHtml({
       agency: {
         name: process.env.AGENCY_NAME || "La tua Web Agency",
         email: process.env.AGENCY_EMAIL || "info@tua-agency.com",
@@ -89,22 +132,73 @@ export default async function handler(req, res) {
       customer,
       quoteText,
       meta: meta || {},
-      filename: baseName,
+      date: new Date().toLocaleDateString("it-IT", { timeZone: "Europe/Rome" }),
     });
 
-    // Best-effort: aggiorna stato preventivo dopo l'invio
+    // 2) PDF buffer
+    const pdfBuffer = await makePdfBuffer(html);
+
+    // 3) Persist nel DB: customer + meta + PDF
     if (quoteId) {
       try {
-        const prisma = await getPrisma();
+        const { prisma, Prisma } = await getPrisma();
+        const toDec = (v) =>
+          v === null || v === undefined || v === ""
+            ? null
+            : new Prisma.Decimal(v);
+
+        // salva PDF
+        const stored = await prisma.storedPdfDb.create({
+          data: {
+            filename: outName,
+            contentType: "application/pdf",
+            bytes: pdfBuffer,
+            size: pdfBuffer.length,
+            chatId: null,
+          },
+        });
+
+        // aggiorna quote
         await prisma.quote.update({
           where: { id: String(quoteId) },
-          data: { status: "pdf_generated", pdfGeneratedAt: new Date() },
+          data: {
+            customerName: customer?.name ?? null,
+            customerEmail: customer?.email ?? null,
+            customerPhone: customer?.phone ?? null,
+
+            package: meta?.package ?? undefined,
+            subtotal: Number.isFinite(meta?.subtotal)
+              ? toDec(meta.subtotal)
+              : undefined,
+            discount: Number.isFinite(meta?.discount)
+              ? toDec(meta.discount)
+              : undefined,
+            total: Number.isFinite(meta?.total) ? toDec(meta.total) : undefined,
+            currency: meta?.currency ?? undefined,
+            deliveryTime: meta?.deliveryTime ?? undefined,
+            validityDays:
+              Number.isFinite(meta?.validityDays) && meta.validityDays >= 0
+                ? meta.validityDays
+                : undefined,
+
+            jsonFinal:
+              meta && Object.keys(meta).length > 0 ? meta : Prisma.JsonNull,
+
+            status: "pdf_generated",
+            pdfGeneratedAt: new Date(),
+            storedPdfId: stored.id,
+          },
         });
       } catch (e) {
-        console.warn("Impossibile aggiornare lo stato del preventivo:", e);
+        console.warn("Persist PDF/Quote update failed:", e);
+        // non interrompiamo la risposta PDF all'utente
       }
     }
-    return;
+
+    // 4) Risposta PDF
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader("Content-Disposition", `attachment; filename="${outName}"`);
+    return res.end(pdfBuffer);
   } catch (err) {
     console.error("Errore /api/quote/pdf-from-html:", err);
     if (!res.headersSent) {
