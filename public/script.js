@@ -354,7 +354,7 @@ function buildCustomerForm() {
         const url = URL.createObjectURL(blob);
         const a = document.createElement("a");
         a.href = url;
-        a.download = safeFilename
+        a.download = safeFilename;
         document.body.appendChild(a);
         a.click();
         a.remove();
@@ -446,7 +446,7 @@ async function onSend() {
     const res = await fetch(`${API_BASE}/api/chat`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ messages }),
+      body: JSON.stringify({ messages, clientKey: CLIENT_KEY }),
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || res.statusText);

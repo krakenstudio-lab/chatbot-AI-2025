@@ -1,9 +1,10 @@
+// api/chat.js
 const ChatbotClient =
   process.env.NODE_ENV === "production"
     ? require("../src/clients/ChatbotClient")
     : require("../src/clients/MockChatbotClient");
 
-const client = new ChatbotClient(process.env.OPENAI_API_KEY);
+const openaiClient = new ChatbotClient(process.env.OPENAI_API_KEY);
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -31,6 +32,15 @@ function setCors(req, res) {
   res.setHeader("Access-Control-Max-Age", "86400");
 }
 
+// ===== Prisma lazy (solo quando serve) =====
+let __prisma = null;
+async function getPrisma() {
+  if (__prisma) return __prisma;
+  const mod = await import("@prisma/client");
+  __prisma = new mod.PrismaClient();
+  return __prisma;
+}
+
 export default async function handler(req, res) {
   setCors(req, res);
 
@@ -44,13 +54,42 @@ export default async function handler(req, res) {
   }
 
   try {
-    const { messages } = req.body || {};
+    const { messages, clientKey } = req.body || {};
     if (!Array.isArray(messages)) {
       return res
         .status(400)
         .json({ error: "`messages` deve essere un array." });
     }
-    const reply = await client.sendMessage(messages);
+
+    // ---- Gate: client disabilitato o inesistente -> offline message ----
+    if (clientKey) {
+      try {
+        const prisma = await getPrisma();
+        const client = await prisma.client.findFirst({
+          where: { embedKey: String(clientKey) },
+          select: { status: true },
+        });
+
+        if (!client || client.status === "disabled") {
+          return res.status(200).json({
+            role: "assistant",
+            content:
+              "Chatbot attualmente fuori servizio. Ci scusiamo per il disagio.",
+          });
+        }
+      } catch (e) {
+        // In caso di errore DB, fail-closed (meglio bloccare che rispondere col modello)
+        console.warn("Client status check failed:", e);
+        return res.status(200).json({
+          role: "assistant",
+          content:
+            "Chatbot attualmente fuori servizio. Ci scusiamo per il disagio.",
+        });
+      }
+    }
+    // -------------------------------------------------------------------
+
+    const reply = await openaiClient.sendMessage(messages);
     return res.status(200).json(reply);
   } catch (err) {
     console.error("Errore /api/chat:", err);
