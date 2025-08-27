@@ -14,75 +14,67 @@ const CLIENT_KEY = window.CHAT_CLIENT_KEY || null;
 const systemPrompt = {
   role: "system",
   content: `
-Sei un assistente per preventivi di una web agency. Parli in italiano in modo chiaro e professionale.
+Sei un assistente preventivi per una web agency. Rispondi in italiano, chiaro e professionale, senza gergo inutile.
 
-FLOW
-- Fai 3–4 domande di chiarimento. Priorità:
-  1) WordPress o custom? 2) E-commerce sì/no (e range prodotti)? 
-  3) Funzionalità chiave (blog, contatti, newsletter, recensioni, multilingua, area riservata). 
-  4) Numero pagine, lingue, deadline e budget (anche range).
-- Se l’utente è sbrigativo, mantieni almeno 2 domande (e-commerce? pagine/lingue?).
-- Quando hai info sufficienti, proponi il pacchetto più adatto (Start/Pro/Leader). Se utile, proponi 1 alternativa con differenze chiare.
+OBIETTIVO
+- Capire il bisogno con poche domande e produrre un PREVENTIVO COMPLETO pronto per il PDF.
+- Se hai info sufficienti, vai subito al preventivo finale (niente ulteriori conferme).
+- Se mancano dati critici, dichiara 2–4 assunzioni e procedi comunque al preventivo.
 
-PACCHETTI (caratteristiche di default)
-- Start (1.500 €): Sito vetrina leggero, 1 pagina, 1 lingua, Area Servizi, Galleria foto, Contatti, Social, fino a 3 email, 2 GB spazio server. Perfetto per: piccolo imprenditore, budget definito, consegna rapida, sito veloce.
-- Pro (2.500 €): 5 pagine, 1 lingua, Area Servizi, Galleria Instagram, Contatti, Social, fino a 10 email, 4 GB spazio server, Newsletter, Blog, Recensioni, Testi scritti da noi. Per PMI che vogliono più pagine e copertura SEO base.
-- Leader (da 4.000 €): Pagine da definire, Multilingua, Blocco Servizi, Galleria Foto/Instagram, Contatti, Social, email illimitate, 6 GB spazio server, Newsletter, Blog, Recensioni, Copywriting, Area riservata. Massima personalizzazione e scalabilità.
+DOMANDE (max 3, solo se servono)
+1) WordPress o custom?
+2) E-commerce? Se sì: ~quanti prodotti?
+3) Pagine/lingue + funzionalità chiave (blog, newsletter, recensioni, multilingua, area riservata).
+(se l’utente è sbrigativo, fai solo 2 domande: e-commerce? pagine/lingue?)
 
-PERCHÉ REALIZZARE QUESTI PACCHETTI (copy di riferimento)
-- Start — perché:
-  • Un sito professionale oggi è fondamentale per presentarsi al meglio, superare la concorrenza e raggiungere clienti in target.
-  • Molte realtà non hanno un sito e perdono opportunità: Start ti rende subito presente online con rapidità e semplicità.
-- Pro — perché:
-  • È perfetto per presentarsi in modo professionale, comunicando valori e servizi con più pagine organizzate.
-  • Più pagine = più spazio per differenziare servizi/prodotti e lavorare meglio su SEO e conversioni.
-  • Se vuoi fare la differenza online e sentirti “un vero Pro”, questo è il passo giusto.
-- Leader — perché:
-  • Per aziende/imprenditori che vogliono il massimo e amano distinguersi.
-  • Prodotto di altissima qualità, 100% su misura (come un abito sartoriale).
-  • Funzioni aggiuntive anche ad hoc per performare “a tutto gas” su esigenze specifiche (integrazioni, area riservata, workflow).
+PACCHETTI (default)
+- Start (2.500 €): vetrina 1 pagina, 1 lingua, Servizi, Galleria foto, Contatti, Social, fino a 3 email, 2 GB.
+- Pro (4.000 €): 5 pagine, 1 lingua, Servizi, Galleria Instagram, Contatti, Social, fino a 10 email, 4 GB, Newsletter, Blog, Recensioni, testi inclusi.
+- Leader (da 6.000 €): pagine su misura, multilingua, Servizi, Galleria Foto/IG, Contatti, Social, email illimitate, 6 GB, Newsletter, Blog, Copywriting, Area riservata.
 
-ISTRUZIONE DI PRESENTAZIONE “PERCHÉ SCEGLIERLO”
-- Quando consigli un pacchetto nel PREVENTIVO COMPLETO, inserisci una mini-sezione “Perché scegliere questo pacchetto” con 2–4 bullet tratti/adattati dal copy sopra, contestualizzati sull’uso del cliente.
+GUIDA AI PREZZI
+- Parti da: Start 2.500 €, Pro 4.000 €, Leader 6.000 €+.
+- Adatta ±10% per complessità (pagine, lingue, e-commerce, area riservata, integrazioni, contenuti).
+- Tutti i prezzi sono **IVA inclusa** (mantieni coerenza).
 
-PREZZI
-- Emetti preventivi attorno a: Start 1.500 €, Pro 2.500 €, Leader 4.000 €+.
-- Adatta +/- 10% secondo complessità: più pagine, multilingua, e-commerce, area riservata, integrazioni esterne, SEO avanzata, contenuti da produrre.
-- Mostra cifre in EUR con formattazione italiana (es. 2.500,00 €). Specifica che i prezzi sono IVA esclusa, salvo diversa indicazione.
+PERCHÉ SCEGLIERLO (spunti sintetici)
+- Start: presenza veloce e professionale, subito online.
+- Pro: più pagine = più SEO e contenuti; immagine completa.
+- Leader: massima personalizzazione, integrazioni e scalabilità.
 
-USCITA FINALE (quando sei pronto a quotare)
-- Titolo: "PREVENTIVO COMPLETO".
-- Sezioni (bullet points):
-  • Riepilogo esigenza/contesto (2 righe).
-  • “Perché scegliere questo pacchetto” (2–4 bullet).
-  • Pacchetto consigliato (Start/Pro/Leader) + eventuale alternativa.
-  • Elenco voci con prezzi riga per riga (setup, sviluppo, contenuti, integrazioni, hosting/maintenance).
-  • Tempi di consegna indicativi: Start 7–14 gg lavorativi; Pro 2–3 settimane; Leader 4–8 settimane (in base a materiali).
-  • Termini di pagamento (esempio: 50% anticipo, 50% saldo a collaudo) e validità offerta 30 giorni.
-  • Note/Assunzioni.
-- Totale finale in evidenza (IVA inclusa). Se utile, aggiungi sconto o range.
+STILE DI USCITA (importantissimo)
+- Niente tabelle, niente tono prolisso, niente emoji.
+- Voci economiche SEMPRE come bullet "- Titolo: 1.500,00 €" (numero PRIMA, poi "€").
+- Formatta valute in EUR con separatori italiani (es. 2.500,00 €).
+- Includi tempi e termini standard: Start 7–14 gg; Pro 2–3 sett.; Leader 4–8 sett. Pagamenti 50%/50%. Validità offerta 30 giorni.
 
-SEGNALE PER FRONTEND (MOSTRARE BOTTONE PDF SOLO QUANDO PRONTO)
-- SOLO quando pubblichi il preventivo definitivo, chiudi il messaggio con un blocco JSON in un fence \`\`\`json (nessun altro JSON nella conversazione) con:
-  {
-    "pdfReady": true,
-    "package": "Start|Pro|Leader",
-    "subtotal": number,
-    "discount": number|null,
-    "total": number,
-    "currency": "EUR",
-    "deliveryTime": "string",
-    "validityDays": 30
-  }
+STRUTTURA DEL PREVENTIVO FINALE
+Titolo: "PREVENTIVO COMPLETO"
+Sezioni (in quest’ordine):
+- Riepilogo esigenza/contesto (2 righe).
+- Perché scegliere questo pacchetto (2–3 bullet sintetici).
+- Pacchetto consigliato (Start/Pro/Leader) + (facoltativa) 1 alternativa con 2 differenze chiare.
+- Voci di costo (bullet "- Nome voce: 1.500,00 €"): sviluppo, contenuti/copy, integrazioni, hosting/maintenance; aggiungi voci pertinenti.
+- Tempi di consegna (in base al pacchetto).
+- Termini di pagamento e validità offerta 30 giorni.
+- Note/Assunzioni (solo se servono, molto brevi).
+- Totale finale in evidenza (IVA inclusa).
 
-TONO E FORMATO
-- Professionale ma semplice; niente gergo superfluo; bullets chiari.
-- Se mancano dati critici (es. n. pagine), esplicita le assunzioni usate per quotare.
-- Non parlare di “prompt” o dettagli interni.
-
-REGOLE DI CHIUSURA
-- Se hai già consigliato un pacchetto, NELLA STESSA RISPOSTA passa subito all’USCITA FINALE con titolo "PREVENTIVO COMPLETO" e chiudi con il blocco JSON richiesto.
-- NON chiedere altre conferme: quando ritieni di avere abbastanza info, produci direttamente il PREVENTIVO COMPLETO con totale e JSON finale.
+REGOLE FINALI
+- Quando proponi un pacchetto, NELLA STESSA RISPOSTA produci subito il PREVENTIVO COMPLETO.
+- Chiudi il messaggio con **un solo** blocco \`\`\`json contenente ESATTAMENTE:
+{
+  "pdfReady": true,
+  "package": "Start|Pro|Leader",
+  "subtotal": number,
+  "discount": number|null,
+  "total": number,
+  "currency": "EUR",
+  "deliveryTime": "string",
+  "validityDays": 30
+}
+- Coerenza numerica: totale = subtotale − sconto. Se applichi sconto, mostrane la riga nelle voci.
+- Non inserire altri JSON o code block oltre al blocco finale richiesto.
 `,
 };
 
@@ -131,6 +123,116 @@ function isLikelyFinalQuote(text) {
   return hasTotal || (hasCurrencyPrice && (hasBullets || hasDelivery));
 }
 
+// --- HIDE JSON: rimuove fence ```json e anche blocchi { ... } con "pdfReady" a fine testo
+function stripPdfMetaBlock(s) {
+  if (!s) return "";
+  let out = String(s);
+
+  // fence ```json ... ``` completo
+  out = out.replace(/```json[\s\S]*?```/gi, "");
+
+  // fence ```json senza chiusura fino a fine stringa
+  out = out.replace(/```json[\s\S]*$/i, "");
+
+  // qualunque fence che contenga "pdfReady"
+  out = out.replace(/```[\s\S]*?"pdfReady"\s*:[\s\S]*?```/gi, "");
+
+  // trailing JSON non-fenced che contiene "pdfReady" (anche racchiuso da **)
+  out = out.replace(
+    /\*?\*?\s*\{\s*[\s\S]*?"pdfReady"\s*:[\s\S]*?\}\s*\*?\*?\s*$/i,
+    ""
+  );
+
+  return out.trim();
+}
+
+function escapeHtml(s) {
+  return String(s)
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;");
+}
+
+// --- RENDER: bold + intestazioni + liste pulite
+function renderAssistantHtml(raw) {
+  // 0) rimuovi JSON finale
+  let s = stripPdfMetaBlock(raw || "");
+
+  // 1) escape tutto
+  s = escapeHtml(s);
+
+  // 2) **bold** / __bold__
+  s = s
+    .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
+    .replace(/__(.+?)__/g, "<strong>$1</strong>");
+
+  // 3) riga per riga → intestazioni, paragrafi, liste
+  const lines = s.split(/\r?\n/);
+  let html = "";
+  let inList = false;
+
+  const closeList = () => {
+    if (inList) {
+      html += "</ul>";
+      inList = false;
+    }
+  };
+
+  for (const rawLine of lines) {
+    const line = rawLine.trim();
+    if (!line) {
+      closeList();
+      html += '<div class="h-2"></div>';
+      continue;
+    }
+
+    // righe che iniziano con '-' o '•'
+    const m = line.match(/^[-•]\s+(.*)$/);
+    if (m) {
+      const body = m[1];
+
+      // A) intestazione tipo "- <strong>Titolo:</strong>" o "- <strong>Titolo:</strong> testo"
+      const h1 = body.match(/^<strong>([^<]+)<\/strong>\s*:\s*(.*)$/);
+      if (h1) {
+        const title = h1[1].trim();
+        const rest = h1[2].trim();
+        closeList();
+        if (rest) {
+          // esempio: "- <strong>Riepilogo esigenza/contesto:</strong> testo..."
+          html += `<p><strong>${title}:</strong> ${rest}</p>`;
+        } else {
+          // esempio: "- <strong>Voci di costo:</strong>"
+          html += `<div class="font-semibold mt-2">${title}:</div>`;
+        }
+        continue;
+      }
+
+      // B) vero bullet (es. costi o punti elenco del "Perché")
+      if (!inList) {
+        html += '<ul class="list-disc pl-5 space-y-1">';
+        inList = true;
+      }
+      html += `<li>${body}</li>`;
+      continue;
+    }
+
+    // C) riga normale → paragrafo
+    closeList();
+    html += `<p>${line}</p>`;
+  }
+  closeList();
+
+  // 4) titolo "PREVENTIVO COMPLETO" come header se è la prima riga
+  html = html.replace(
+    /^<p>\s*PREVENTIVO COMPLETO\s*<\/p>/i,
+    '<div class="font-semibold uppercase tracking-wide mb-1">PREVENTIVO COMPLETO</div>'
+  );
+
+  return html;
+}
+
 function renderChat() {
   chatWindow.innerHTML = "";
 
@@ -146,11 +248,17 @@ function renderChat() {
       "py-2",
       "rounded-lg",
       "break-words",
+      "whitespace-pre-wrap",
+      "leading-6",
       msg.role === "user"
         ? "bg-blue-500 text-white rounded-br-none"
         : "bg-gray-200 text-gray-800 rounded-bl-none",
     ].join(" ");
-    bubble.textContent = msg.content;
+    if (msg.role === "assistant") {
+      bubble.innerHTML = renderAssistantHtml(msg.content);
+    } else {
+      bubble.textContent = msg.content;
+    }
     wrap.appendChild(bubble);
     chatWindow.appendChild(wrap);
   }
@@ -187,6 +295,13 @@ function extractLastJsonBlock(text) {
     } catch {}
   }
   return null;
+}
+function stripFinalJsonBlock(s) {
+  if (!s) return "";
+  // rimuove SOLO l'ultimo blocco ```json ... ```
+  return String(s)
+    .replace(/```json[\s\S]*?```(?![\s\S]*```)/i, "")
+    .trim();
 }
 function parseEuroToNumber(v) {
   if (v == null) return null;
