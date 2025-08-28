@@ -82,11 +82,42 @@ let chatHistory = [];
 let lastAssistantText = null; // verrà settato SOLO se il messaggio AI sembra un preventivo finale
 let showCustomerForm = false;
 
+const WELCOME_TEXT = `Ciao! 👋
+Ti aiuto a preparare un PREVENTIVO COMPLETO per il tuo sito.
+Dimmi in poche parole cosa ti serve (es. vetrina, blog, e-commerce).
+Se preferisci, posso farti 2-3 domande rapide per arrivare subito al preventivo.`;
+
+let hasWelcomed = false;
+
+let isThinking = false;
+
+// CSS minimale per l'animazione "..." (iniettato a runtime)
+(function addLoaderCss() {
+  const css = `
+  .typing { display:inline-block; vertical-align:baseline; }
+  .typing .dot { display:inline-block; margin:0 2px; opacity:0.25; animation: blink 1.2s infinite ease-in-out; }
+  .typing .dot:nth-child(2){ animation-delay: .2s; }
+  .typing .dot:nth-child(3){ animation-delay: .4s; }
+  @keyframes blink { 0%,80%,100%{opacity:.25} 40%{opacity:1} }
+  `;
+  const style = document.createElement("style");
+  style.textContent = css;
+  document.head.appendChild(style);
+})();
+
 function openChat() {
   chatModal.classList.remove("hidden");
   document.body.classList.add("overflow-hidden"); // blocca lo scroll sotto
   setTimeout(() => promptInput?.focus(), 0);
+
+  // Mostra il messaggio di benvenuto una sola volta
+  if (!hasWelcomed) {
+    chatHistory.push({ role: "assistant", content: WELCOME_TEXT });
+    hasWelcomed = true;
+    renderChat();
+  }
 }
+
 function closeChat() {
   chatModal.classList.add("hidden");
   document.body.classList.remove("overflow-hidden");
@@ -107,10 +138,27 @@ function extractFinalJsonBlock(text) {
 // Heuristica: il testo AI sembra un preventivo finale con prezzi
 function shouldEnablePdf(text) {
   if (!text) return false;
-  const meta = extractFinalJsonBlock(text);
-  if (meta?.pdfReady === true) return true; // segnale forte
-  if (/PREVENTIVO COMPLETO/i.test(text)) return true; // testo chiave
-  return isLikelyFinalQuote(text); // fallback euristico
+
+  // 1) Canale "sicuro": JSON finale con pdfReady:true
+  const metaJson = extractFinalJsonBlock(text);
+  if (metaJson?.pdfReady === true) return true;
+
+  // 2) Serve che sia un vero preventivo
+  const hasTitle = /(^|\n)\s*PREVENTIVO COMPLETO\s*($|\n)/i.test(text);
+  if (!hasTitle) return false;
+
+  // 3) Prova a ricavare numeri dal testo (usa la tua logica già collaudata)
+  const auto = buildMetaFromText(text); // { subtotal, discount, total }
+  const hasMoney =
+    (Number.isFinite(auto.total) && auto.total > 0) ||
+    (Number.isFinite(auto.subtotal) && auto.subtotal > 0);
+
+  if (hasMoney) return true;
+
+  // 4) Ultimo fallback: riga "Totale" con importo (anche in grassetto)
+  const hasTotalLabel =
+    /\bTotale(?:\s*finale)?\b[^0-9\n]*\d[\d\.,]*\s*(?:€|euro)?/i.test(text);
+  return hasTotalLabel;
 }
 
 function isLikelyFinalQuote(text) {
@@ -264,7 +312,12 @@ function renderChat() {
   }
 
   // Mostra azione PDF solo se l'ultimo messaggio AI è un preventivo finale con prezzi
-  if (lastAssistantText) {
+  const lastMsg = chatHistory[chatHistory.length - 1];
+  if (
+    lastAssistantText &&
+    lastMsg?.role === "assistant" &&
+    lastMsg.content === lastAssistantText
+  ) {
     const actions = document.createElement("div");
     actions.className = "mt-3 flex justify-end gap-2";
     const useBtn = document.createElement("button");
@@ -281,6 +334,29 @@ function renderChat() {
 
   if (showCustomerForm) {
     chatWindow.appendChild(buildCustomerForm());
+  }
+
+  // Loader "assistant sta scrivendo..."
+  if (isThinking) {
+    const wrap = document.createElement("div");
+    wrap.className = "flex justify-start";
+    const bubble = document.createElement("div");
+    bubble.className = [
+      "max-w-[75%]",
+      "px-4",
+      "py-2",
+      "rounded-lg",
+      "break-words",
+      "whitespace-pre-wrap",
+      "leading-6",
+      "bg-gray-200",
+      "text-gray-800",
+      "rounded-bl-none",
+    ].join(" ");
+    bubble.innerHTML = `Sto preparando la risposta
+    <span class="typing"><span class="dot">●</span><span class="dot">●</span><span class="dot">●</span></span>`;
+    wrap.appendChild(bubble);
+    chatWindow.appendChild(wrap);
   }
 
   chatWindow.scrollTop = chatWindow.scrollHeight;
@@ -336,13 +412,14 @@ function findNumberAfter(labelRegex, text) {
 
 // Somma voci tipo "- Setup: 1.500,00 €" o "• **Setup**: 1.500,00 €" anche inline
 function sumLineItems(text) {
+  // match sia "- Voce: 1.234,00 €" che "Voce: 1.234,00 €"
   const re =
-    /(?:^|\n|\s)[-•]\s*(?:\*\*|__)?[^:\n]+?(?:\*\*|__)?\s*:\s*([0-9][0-9\.,]*)\s*(?:€|euro)\b/gi;
+    /(^|\n)\s*(?:[-•]\s*)?[^:\n]+:\s*([0-9][0-9\.,]*)\s*(?:€|euro)\b/gi;
   let sum = 0,
     hit = false,
     m;
   while ((m = re.exec(text))) {
-    const n = parseEuroToNumber(m[1]);
+    const n = parseEuroToNumber(m[2] || m[1]); // per sicurezza
     if (Number.isFinite(n)) {
       sum += n;
       hit = true;
@@ -544,15 +621,23 @@ async function saveQuoteIfFinal(aiText) {
 }
 
 async function onSend() {
+  if (isThinking) return; // evita invii multipli mentre l'AI elabora
+
   const text = promptInput.value.trim();
   if (!text) return alert("Inserisci un messaggio!");
 
-  // Ogni nuovo input utente azzera il preventivo mostrato
   chatHistory.push({ role: "user", content: text });
   lastAssistantText = null;
   showCustomerForm = false;
-  renderChat();
   promptInput.value = "";
+
+  // attiva loader + disabilita pulsante
+  isThinking = true;
+  sendBtn.disabled = true;
+  const oldSendTxt = sendBtn.textContent;
+  sendBtn.textContent = "Sto scrivendo…";
+
+  renderChat();
 
   const messages = chatHistory.slice();
   if (messages[0]?.role !== "system") messages.unshift(systemPrompt);
@@ -582,6 +667,11 @@ async function onSend() {
       role: "assistant",
       content: `❌ Errore: ${err.message}`,
     });
+    renderChat();
+  } finally {
+    isThinking = false;
+    sendBtn.disabled = false;
+    sendBtn.textContent = oldSendTxt;
     renderChat();
   }
 }
