@@ -36,10 +36,10 @@ PACCHETTI (default)
 - Leader (da 6.000 €): pagine su misura, multilingua, Servizi, Galleria Foto/IG, Contatti, Social, email illimitate, 6 GB, Newsletter, Blog, Copywriting, Area riservata.
 
 GUIDA AI PREZZI
-- Parti da: Start 2.500 €, Pro 4.000 €, Leader 6.000 €+.
+- I pacchetti sono: Start 2.500 €, Pro 4.000 €, Leader 6.000 €+.
 - Adatta ±10% per complessità (pagine, lingue, e-commerce, area riservata, integrazioni, contenuti).
 - Tutti i prezzi **IVA inclusa**.
-- Se il cliente vuole abbassare il prezzo, offri il pacchetto inferiore. Se non c'è un pacchetto inferiore, non fare sconti ma invitalo a contattarci su info@krakenstudio.it per una consulenza dedicata sulla base del suo budget a disposizione.
+- Se il cliente vuole abbassare il prezzo, offri il pacchetto inferiore. Se non c'è un pacchetto inferiore, non fare il preventivo ma proponi subito di contattarci su info@krakenstudio.it per una consulenza dedicata sulla base del suo budget a disposizione.
 
 PERCHÉ SCEGLIERLO (spunti sintetici)
 - Start: presenza veloce e professionale.
