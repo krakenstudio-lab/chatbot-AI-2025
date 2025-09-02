@@ -20,15 +20,17 @@ OBIETTIVO A DUE FASI
 - FASE 1 (intervista): raccogli i DATI MINIMI OBBLIGATORI.
 - FASE 2 (output): quando hai tutti i dati, produci un PREVENTIVO COMPLETO.
 
-DATI MINIMI OBBLIGATORI (tutti e 3)
-A) Piattaforma: WordPress o custom.
+DATI MINIMI OBBLIGATORI (tutti e 3, in quest'ordine e senza inferenze)
+A) Piattaforma (OBBLIGATORIO, NON inferibile): "WordPress" oppure "custom".
 B) E-commerce: sì/no. Se sì: ordine di grandezza prodotti iniziali.
 C) Pagine/lingue + 1–3 funzionalità chiave (blog, newsletter, recensioni, multilingua, area riservata).
 
 REGOLE INTERVISTA (vincolanti)
-- Fai 2–3 domande mirate per coprire A/B/C.
-- NON scrivere cifre e NON generare "PREVENTIVO COMPLETO" finché manca uno dei tre punti.
-- Se l’utente dà info parziali, chiedi solo ciò che manca. Quando tutto è noto, passa alla FASE 2.
+- Fai al massimo 2–3 domande, ma **in quest'ordine**: prima A, poi B, poi C.
+- **Non inferire A** da frasi tipo “sito vetrina” o “semplice”: se A non è stato detto esplicitamente, chiedi: 
+  "Preferisci WordPress o sviluppo custom?"
+- Se l’utente ha già dato A, chiedi B; se ha dato A e B, chiedi C. Non chiedere nulla di già noto.
+- In FASE 1 non scrivere cifre, non generare "PREVENTIVO COMPLETO".
 
 PACCHETTI (default)
 - Start (2.500 €): vetrina 1 pagina, 1 lingua, Servizi, Galleria foto, Contatti, Social, fino a 3 email, 2 GB.
@@ -39,12 +41,7 @@ GUIDA AI PREZZI
 - I pacchetti sono: Start 2.500 €, Pro 4.000 €, Leader 6.000 €+.
 - Adatta ±10% per complessità (pagine, lingue, e-commerce, area riservata, integrazioni, contenuti).
 - Tutti i prezzi **IVA inclusa**.
-- Se il cliente vuole abbassare il prezzo, offri il pacchetto inferiore. Se non c'è un pacchetto inferiore, non fare il preventivo ma proponi subito di contattarci su info@krakenstudio.it per una consulenza dedicata sulla base del suo budget a disposizione.
-
-PERCHÉ SCEGLIERLO (spunti sintetici)
-- Start: presenza veloce e professionale.
-- Pro: più pagine = più SEO e contenuti.
-- Leader: massima personalizzazione e scalabilità.
+- Se il cliente vuole abbassare il prezzo, offri il pacchetto inferiore. Se non esiste un pacchetto inferiore adatto, non generare il preventivo: invita a scrivere a info@krakenstudio.it per una consulenza sul budget.
 
 STILE DI USCITA (solo in FASE 2)
 - Niente tabelle, niente emoji, niente gergo.
@@ -78,7 +75,7 @@ REGOLE FINALI (obbligatorie)
 }
 - Il totale deve rispettare: totale = subtotale − sconto.
 - NON inserire altri blocchi di codice o JSON oltre a quello finale.
-- Se per qualsiasi motivo ti accorgi di non aver aggiunto il blocco JSON, **correggi immediatamente** appendendolo in coda e **non scrivere altro dopo il JSON**.
+- Se ti accorgi di non aver aggiunto il blocco JSON, **appendilo in coda** e non scrivere altro dopo il JSON.
 `,
 };
 
@@ -143,29 +140,31 @@ function extractFinalJsonBlock(text) {
 function shouldEnablePdf(text) {
   if (!text) return false;
 
-  // 1) Canale "sicuro": JSON finale con pdfReady:true
-  const metaJson = extractFinalJsonBlock(text);
+  // 1) canale sicuro: JSON finale con pdfReady:true (accetta ```json o ``` semplice)
+  const metaJson = extractLastJsonBlock(text);
   if (metaJson?.pdfReady === true) return true;
 
-  // 2) Titolo: accetta anche markdown heading tipo "### PREVENTIVO COMPLETO"
-  const hasTitle = /(^|\n)\s*(?:#{1,6}\s*)?PREVENTIVO COMPLETO\s*($|\n)/i.test(
-    text
-  );
-  if (!hasTitle) return false;
+  // 2) è davvero un preventivo? accetta titoli markdown o frasi tipo "preventivo completo"
+  const hasTitleOrPhrase =
+    /(^|\n)\s*(?:#{1,6}\s*)?PREVENTIVO COMPLETO\s*($|\n)/i.test(text) ||
+    /\bpreventivo\s+completo\b/i.test(text); // es. "Ecco il preventivo completo ..."
 
-  // 3) Ricava numeri dal testo (subtotal/discount/total)
-  const auto = buildMetaFromText(text);
+  // 3) ha cifre: somma voci o trova "Totale/Costo totale"
+  const auto = buildMetaFromText(text); // {subtotal, discount, total}
   const hasMoney =
     (Number.isFinite(auto.total) && auto.total > 0) ||
     (Number.isFinite(auto.subtotal) && auto.subtotal > 0);
-  if (hasMoney) return true;
 
-  // 4) Fallback: riga Totale o Costo totale con importo (tollerante a grassetto)
+  // 4) fallback robusto per "Totale" (tollerante a 'finale', grassetto, spazi, parentesi)
   const hasTotalLabel =
-    /\b(?:Totale(?:\s*finale)?|Costo\s*totale)\b[^0-9\n]*\d[\d\.,]*\s*(?:€|euro)?/i.test(
+    /\b(?:Totale(?:\s*finale)?|Costo\s*totale)\b[^0-9\n]*\**€?\s*\d[\d\.,]*\s*(?:€|euro)?/i.test(
       text
     );
-  return hasTotalLabel;
+
+  // 5) ulteriore rete di sicurezza: eur + bullet/tempi consegna
+  const heuristic = isLikelyFinalQuote(text);
+
+  return (hasTitleOrPhrase && (hasMoney || hasTotalLabel)) || heuristic;
 }
 
 function isLikelyFinalQuote(text) {
