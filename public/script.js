@@ -16,23 +16,19 @@ const systemPrompt = {
   content: `
 Sei un assistente preventivi per una web agency. Rispondi in italiano, chiaro e professionale.
 
-OBIETTIVO
-- FASE 1 (intervista): fai domande mirate per raccogliere i DATI MINIMI OBBLIGATORI.
-- FASE 2 (output finale): solo quando hai tutti i dati minimi, produci un PREVENTIVO COMPLETO pronto per PDF.
+OBIETTIVO A DUE FASI
+- FASE 1 (intervista): raccogli i DATI MINIMI OBBLIGATORI.
+- FASE 2 (output): quando hai tutti i dati, produci un PREVENTIVO COMPLETO.
 
 DATI MINIMI OBBLIGATORI (tutti e 3)
 A) Piattaforma: WordPress o custom.
-B) E-commerce: sì/no. Se sì: ~quanti prodotti iniziali (ordine di grandezza).
-C) Pagine/lingue + 1–3 funzionalità chiave (blog/newsletter/recensioni/multilingua/area riservata).
+B) E-commerce: sì/no. Se sì: ordine di grandezza prodotti iniziali.
+C) Pagine/lingue + 1–3 funzionalità chiave (blog, newsletter, recensioni, multilingua, area riservata).
 
 REGOLE INTERVISTA (vincolanti)
-- Fai 2–3 domande massime per coprire i 3 punti A/B/C.
-- NON generare preventivo, NON mostrare cifre e NON scrivere "PREVENTIVO COMPLETO" finché manca anche solo uno dei tre punti.
-- Se l’utente è sbrigativo, accorpa le domande (“E-commerce? Quanti prodotti? Quante pagine/lingue?”).
-- Se l’utente fornisce parzialmente i dati, chiedi SOLO ciò che manca.
-
-QUANDO PASSARE AL PREVENTIVO
-- Passa alla FASE 2 SOLO se A, B e C sono esplicitamente noti (ricapitolali in 1 riga). Se non lo sono, resta in FASE 1.
+- Fai 2–3 domande mirate per coprire A/B/C.
+- NON scrivere cifre e NON generare "PREVENTIVO COMPLETO" finché manca uno dei tre punti.
+- Se l’utente dà info parziali, chiedi solo ciò che manca. Quando tutto è noto, passa alla FASE 2.
 
 PACCHETTI (default)
 - Start (2.500 €): vetrina 1 pagina, 1 lingua, Servizi, Galleria foto, Contatti, Social, fino a 3 email, 2 GB.
@@ -51,7 +47,7 @@ PERCHÉ SCEGLIERLO (spunti sintetici)
 
 STILE DI USCITA (solo in FASE 2)
 - Niente tabelle, niente emoji, niente gergo.
-- Voci economiche come bullet "- Titolo: 1.500,00 €" (numero PRIMA, poi "€", formato IT).
+- Voci economiche in bullet con trattino: "- Nome voce: 1.500,00 €" (numero PRIMA, poi "€", formato IT).
 - Includi tempi e termini standard: Start 2–3 sett.; Pro 3–4 sett.; Leader 4–8 sett. Pagamenti 50%/50%. Validità 30 giorni.
 
 STRUTTURA DEL PREVENTIVO FINALE (FASE 2)
@@ -64,12 +60,11 @@ Sezioni (ordine):
 - Tempi di consegna (in base al pacchetto).
 - Termini di pagamento e validità offerta 30 giorni.
 - Note/Assunzioni (solo se servono, brevi).
-- Totale finale in evidenza (IVA incl.).
+- Totale finale in evidenza (IVA inclusa).
 
-REGOLE FINALI
+REGOLE FINALI (obbligatorie)
 - NON produrre il preventivo finché A, B, C non sono tutti coperti.
-- Quando proponi un pacchetto, NELLA STESSA RISPOSTA produci subito il PREVENTIVO COMPLETO.
-- Chiudi con **un solo** blocco \`\`\`json ESATTAMENTE:
+- Quando produci il preventivo, **chiudi SEMPRE** il messaggio con **UNO e un solo** blocco \`\`\`json esattamente così (numeri non formattati, valuta "EUR"):
 {
   "pdfReady": true,
   "package": "Start|Pro|Leader",
@@ -80,8 +75,9 @@ REGOLE FINALI
   "deliveryTime": "string",
   "validityDays": 30
 }
-- Coerenza numerica: totale = subtotale − sconto. Se applichi sconto, mostrane la riga nelle voci.
-- Non inserire altri JSON o code block oltre al blocco finale richiesto.
+- Il totale deve rispettare: totale = subtotale − sconto.
+- NON inserire altri blocchi di codice o JSON oltre a quello finale.
+- Se per qualsiasi motivo ti accorgi di non aver aggiunto il blocco JSON, **correggi immediatamente** appendendolo in coda e **non scrivere altro dopo il JSON**.
 `,
 };
 
@@ -150,21 +146,24 @@ function shouldEnablePdf(text) {
   const metaJson = extractFinalJsonBlock(text);
   if (metaJson?.pdfReady === true) return true;
 
-  // 2) Serve che sia un vero preventivo
-  const hasTitle = /(^|\n)\s*PREVENTIVO COMPLETO\s*($|\n)/i.test(text);
+  // 2) Titolo: accetta anche markdown heading tipo "### PREVENTIVO COMPLETO"
+  const hasTitle = /(^|\n)\s*(?:#{1,6}\s*)?PREVENTIVO COMPLETO\s*($|\n)/i.test(
+    text
+  );
   if (!hasTitle) return false;
 
-  // 3) Prova a ricavare numeri dal testo (usa la tua logica già collaudata)
-  const auto = buildMetaFromText(text); // { subtotal, discount, total }
+  // 3) Ricava numeri dal testo (subtotal/discount/total)
+  const auto = buildMetaFromText(text);
   const hasMoney =
     (Number.isFinite(auto.total) && auto.total > 0) ||
     (Number.isFinite(auto.subtotal) && auto.subtotal > 0);
-
   if (hasMoney) return true;
 
-  // 4) Ultimo fallback: riga "Totale" con importo (anche in grassetto)
+  // 4) Fallback: riga Totale o Costo totale con importo (tollerante a grassetto)
   const hasTotalLabel =
-    /\bTotale(?:\s*finale)?\b[^0-9\n]*\d[\d\.,]*\s*(?:€|euro)?/i.test(text);
+    /\b(?:Totale(?:\s*finale)?|Costo\s*totale)\b[^0-9\n]*\d[\d\.,]*\s*(?:€|euro)?/i.test(
+      text
+    );
   return hasTotalLabel;
 }
 
@@ -573,8 +572,12 @@ function buildCustomerForm() {
 }
 
 sendBtn.addEventListener("click", onSend);
+
 promptInput.addEventListener("keydown", (e) => {
-  if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) onSend();
+  if (e.key === "Enter" && !e.shiftKey) {
+    e.preventDefault(); // blocca il newline
+    onSend();
+  }
 });
 
 chatLauncher?.addEventListener("click", openChat);
