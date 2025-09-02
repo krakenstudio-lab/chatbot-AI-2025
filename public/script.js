@@ -39,6 +39,7 @@ GUIDA AI PREZZI
 - Parti da: Start 2.500 €, Pro 4.000 €, Leader 6.000 €+.
 - Adatta ±10% per complessità (pagine, lingue, e-commerce, area riservata, integrazioni, contenuti).
 - Tutti i prezzi **IVA inclusa**.
+- Se il cliente vuole abbassare il prezzo, offri il pacchetto inferiore. Se non c'è un pacchetto inferiore, non fare sconti ma invitalo a contattarci su info@krakenstudio.it per una consulenza dedicata sulla base del suo budget a disposizione.
 
 PERCHÉ SCEGLIERLO (spunti sintetici)
 - Start: presenza veloce e professionale.
