@@ -10,76 +10,44 @@ const chatClose = document.getElementById("chatClose");
 const API_BASE = window.CHAT_API_BASE || "";
 const CLIENT_KEY = window.CHAT_CLIENT_KEY || null;
 
-// System prompt: intervista -> preventivo testuale (niente JSON)
-const systemPrompt = {
-  role: "system",
-  content: `
-Sei un assistente preventivi per una web agency. Rispondi in italiano, chiaro e professionale.
+const SERVIZI_CLIENT_ID = window.SERVIZI_CLIENT_ID ?? null; // numero o null
+// opzionale: setta l'utente loggato da fuori (Clerk o altro)
+window.__chatUser = window.__chatUser || null;
+// esempio: window.__chatUser = { name: "Giulia Rossi", role: "sales", provider: "clerk", providerId: "user_123" };
 
-OBIETTIVO A DUE FASI
-- FASE 1 (intervista): raccogli i DATI MINIMI OBBLIGATORI.
-- FASE 2 (output): quando hai tutti i dati, produci un PREVENTIVO COMPLETO.
+let __dynamicSystemPrompt = null;
 
-DATI MINIMI OBBLIGATORI (tutti e 3)
-A) Piattaforma: WordPress o custom.
-B) E-commerce: sì/no. Se sì: ordine di grandezza prodotti iniziali.
-C) Pagine/lingue + 1–3 funzionalità chiave (blog, newsletter, recensioni, multilingua, area riservata).
-
-REGOLE INTERVISTA (vincolanti)
-- Fai 2–3 domande mirate per coprire A/B/C.
-- NON scrivere cifre e NON generare "PREVENTIVO COMPLETO" finché manca uno dei tre punti.
-- Se l’utente dà info parziali, chiedi solo ciò che manca. Quando tutto è noto, passa alla FASE 2.
-
-PACCHETTI (default)
-- Start (2.500 €): vetrina 1 pagina, 1 lingua, Servizi, Galleria foto, Contatti, Social, fino a 3 email, 2 GB.
-- Pro (4.000 €): 5 pagine, 1 lingua, Servizi, Galleria Instagram, Contatti, Social, fino a 10 email, 4 GB, Newsletter, Blog, Recensioni, testi inclusi.
-- Leader (da 6.000 €): pagine su misura, multilingua, Servizi, Galleria Foto/IG, Contatti, Social, email illimitate, 6 GB, Newsletter, Blog, Copywriting, Area riservata.
-
-GUIDA AI PREZZI
-- Parti da: Start 2.500 €, Pro 4.000 €, Leader 6.000 €+.
-- Adatta ±10% per complessità (pagine, lingue, e-commerce, area riservata, integrazioni, contenuti).
-- Tutti i prezzi **IVA inclusa**.
-
-PERCHÉ SCEGLIERLO (spunti sintetici)
-- Start: presenza veloce e professionale.
-- Pro: più pagine = più SEO e contenuti.
-- Leader: massima personalizzazione e scalabilità.
-
-STILE DI USCITA (solo in FASE 2)
-- Niente tabelle, niente emoji, niente gergo.
-- Voci economiche in bullet con trattino: "- Nome voce: 1.500,00 €" (numero PRIMA, poi "€", formato IT).
-- Includi tempi e termini standard: Start 2–3 sett.; Pro 3–4 sett.; Leader 4–8 sett. Pagamenti 50%/50%. Validità 30 giorni.
-
-STRUTTURA DEL PREVENTIVO FINALE (FASE 2)
-Titolo: "PREVENTIVO COMPLETO"
-Sezioni (ordine):
-- Riepilogo esigenza/contesto (2 righe).
-- Perché scegliere questo pacchetto (2–3 bullet).
-- Pacchetto consigliato (Start/Pro/Leader) + (facoltativa) 1 alternativa con 2 differenze chiare.
-- Voci di costo (bullet "- Nome voce: 1.500,00 €"): sviluppo, contenuti/copy, integrazioni, hosting/maintenance; aggiungi voci pertinenti.
-- Tempi di consegna (in base al pacchetto).
-- Termini di pagamento e validità offerta 30 giorni.
-- Note/Assunzioni (solo se servono, brevi).
-- Totale finale in evidenza (IVA inclusa).
-
-REGOLE FINALI (obbligatorie)
-- NON produrre il preventivo finché A, B, C non sono tutti coperti.
-- Quando produci il preventivo, **chiudi SEMPRE** il messaggio con **UNO e un solo** blocco \`\`\`json esattamente così (numeri non formattati, valuta "EUR"):
-{
-  "pdfReady": true,
-  "package": "Start|Pro|Leader",
-  "subtotal": number,
-  "discount": number|null,
-  "total": number,
-  "currency": "EUR",
-  "deliveryTime": "string",
-  "validityDays": 30
+async function loadDynamicSystemPrompt() {
+  if (__dynamicSystemPrompt) return __dynamicSystemPrompt;
+  const res = await fetch(`${API_BASE}/api/prompt/services`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      serviziClientId: SERVIZI_CLIENT_ID,
+      user: window.__chatUser
+        ? { name: window.__chatUser.name, role: window.__chatUser.role }
+        : null,
+      language: "it",
+    }),
+  });
+  if (!res.ok) {
+    console.warn("Dynamic prompt fallback to static. HTTP", res.status);
+    return (__dynamicSystemPrompt = DEFAULT_STATIC_PROMPT()); // fallback
+  }
+  const data = await res.json();
+  console.log(
+    "[prompt/services] caricata systemPrompt, lunghezza:",
+    (data.systemPrompt || "").length
+  );
+  return (__dynamicSystemPrompt = data.systemPrompt || DEFAULT_STATIC_PROMPT());
 }
-- Il totale deve rispettare: totale = subtotale − sconto.
-- NON inserire altri blocchi di codice o JSON oltre a quello finale.
-- Se per qualsiasi motivo ti accorgi di non aver aggiunto il blocco JSON, **correggi immediatamente** appendendolo in coda e **non scrivere altro dopo il JSON**.
-`,
-};
+
+// fallback in caso l’endpoint non risponda
+function DEFAULT_STATIC_PROMPT() {
+  return `
+Sei un assistente preventivi per una web agency. Rispondi in italiano, chiaro e professionale.
+(backup statico)`;
+}
 
 let chatHistory = [];
 let lastAssistantText = null; // verrà settato SOLO se il messaggio AI sembra un preventivo finale
@@ -144,7 +112,8 @@ function shouldEnablePdf(text) {
 
   // 1) Canale "sicuro": JSON finale con pdfReady:true
   const metaJson = extractFinalJsonBlock(text);
-  if (metaJson?.pdfReady === true) return true;
+  if (metaJson && metaJson.pdfReady === true && Number.isFinite(metaJson.total))
+    return true;
 
   // 2) Titolo: accetta anche markdown heading tipo "### PREVENTIVO COMPLETO"
   const hasTitle = /(^|\n)\s*(?:#{1,6}\s*)?PREVENTIVO COMPLETO\s*($|\n)/i.test(
@@ -161,7 +130,7 @@ function shouldEnablePdf(text) {
 
   // 4) Fallback: riga Totale o Costo totale con importo (tollerante a grassetto)
   const hasTotalLabel =
-    /\b(?:Totale(?:\s*finale)?|Costo\s*totale)\b[^0-9\n]*\d[\d\.,]*\s*(?:€|euro)?/i.test(
+    /\b(?:Totale(?:\s*finale)?|Costo\s*totale)\b[^0-9\n]*\d[\d\.,]*\s*(?:€|euro|eur)?/i.test(
       text
     );
   return hasTotalLabel;
@@ -650,24 +619,45 @@ async function onSend() {
   renderChat();
 
   const messages = chatHistory.slice();
-  if (messages[0]?.role !== "system") messages.unshift(systemPrompt);
-  if (messages[0]?.role !== "system") {
-    // primo system prompt principale
-    messages.unshift(systemPrompt);
 
-    // 👇 aggiungi subito qui il "reminder" extra per forzare le domande
-    messages.unshift({
+  // 1) carica/usa il prompt dinamico
+  const dynPrompt = await loadDynamicSystemPrompt();
+
+  // 2) inserisci i due system message in testa (ordine: reminder, poi prompt completo)
+  messages.unshift(
+    {
       role: "system",
       content:
         "FASE 1 OBBLIGATORIA: fai 2–3 domande per raccogliere A/B/C. NON generare alcun preventivo o prezzi finché non hai A, B e C.",
-    });
-  }
+    },
+    {
+      role: "system",
+      content:
+        "Quando A/B/C sono completi: 1) Titolo 'PREVENTIVO COMPLETO', 2) voci con importi reali in € formato IT, 3) chiudi con UN SOLO blocco ```json``` come da specifica.",
+    },
+    {
+      role: "system",
+      content: dynPrompt,
+    }
+  );
 
   try {
     const res = await fetch(`${API_BASE}/api/chat`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ messages, clientKey: CLIENT_KEY }),
+      body: JSON.stringify({
+        messages,
+        clientKey: CLIENT_KEY,
+        serviziClientId: SERVIZI_CLIENT_ID,
+        user: window.__chatUser
+          ? {
+              provider: window.__chatUser.provider,
+              providerId: window.__chatUser.providerId,
+              name: window.__chatUser.name,
+              role: window.__chatUser.role,
+            }
+          : null,
+      }),
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || res.statusText);
