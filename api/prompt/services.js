@@ -1,4 +1,4 @@
-// api/prompt/servizi.js  (serverless)  — oppure route Express
+// api/prompt/services.js   (serverless) — oppure la stessa logica in una route Express
 import { PrismaClient } from "@prisma/client";
 const prisma = new PrismaClient();
 
@@ -13,11 +13,12 @@ export default async function handler(req, res) {
   if (req.method !== "POST") return res.status(405).end();
   try {
     const {
-      serviziClientId = null, // numero o null → mostra anche servizi globali
+      serviziClientId = null, // numero o null → include anche servizi globali
       user = null, // { name?: string, role?: string }
-      language = "it", // “it” default
+      language = "it", // per ora IT fisso
     } = req.body || {};
 
+    // 1) Leggi i servizi attivi per clientId o globali
     const servizi = await prisma.servizi.findMany({
       where: {
         flagActive: 1,
@@ -30,21 +31,32 @@ export default async function handler(req, res) {
       select: { nome: true, prezzo: true, descrizione: true },
     });
 
-    const lines = servizi.map((s) => {
-      const nome = sanitize(s.nome || "");
-      const prezzo = sanitize(s.prezzo || "");
-      const descr = short(sanitize(s.descrizione || ""));
-      return `- ${nome}${prezzo ? ` — Prezzo: ${prezzo}` : ""}${
-        descr ? ` — ${descr}` : ""
-      }`;
+    // 2) Normalizza per il prompt + restituisci anche la lista al client
+    const services = servizi.map((s) => ({
+      nome: sanitize(s.nome || ""),
+      descrizione: sanitize(s.descrizione || ""),
+      prezzo: sanitize(s.prezzo || ""),
+    }));
+    const serviceNames = services.map((s) => s.nome).filter(Boolean);
+
+    const catalogLines = services.map((s) => {
+      const bits = [`- ${s.nome}`];
+      if (s.prezzo) bits.push(`Prezzo: ${s.prezzo}`);
+      if (s.descrizione) bits.push(short(s.descrizione));
+      return bits.join(" — ");
     });
 
-    // Piccola personalizzazione su utente (solo saluto/tono)
     const userLine = user?.name
       ? `Questa sessione è avviata da "${user.name}"${
           user?.role ? ` (ruolo: ${user.role})` : ""
         }.`
       : `Questa sessione non fornisce dati utente.`;
+
+    // 3) Prompt DINAMICO: via "PACCHETTI DISPONIBILI" dal DB
+    const packageHint =
+      serviceNames.length > 0
+        ? `Uno dei seguenti: ${serviceNames.join(" | ")}`
+        : `Un nome presente nei pacchetti sopra (se vuoto, usa un nome coerente col contesto)`;
 
     const systemPrompt = [
       `Sei un assistente preventivi per una web agency. Rispondi in italiano, chiaro e professionale.`,
@@ -64,47 +76,44 @@ export default async function handler(req, res) {
       `- NON scrivere cifre e NON generare "PREVENTIVO COMPLETO" finché manca uno dei tre punti.`,
       `- Se l’utente dà info parziali, chiedi solo ciò che manca. Quando tutto è noto, passa alla FASE 2.`,
       ``,
-      `=== CATALOGO SERVIZI DISPONIBILI ===`,
-      lines.length
-        ? lines.join("\n")
-        : `(Nessun servizio disponibile al momento)`,
-      `====================================`,
+      `=== PACCHETTI DISPONIBILI (dal database) ===`,
+      catalogLines.length
+        ? catalogLines.join("\n")
+        : `(Nessun pacchetto disponibile)`,
+      `===========================================`,
       ``,
-      `GUIDA AI PREZZI`,
-      `- Parti da: Start 2.500 €, Pro 4.000 €, Leader 6.000 €+.`,
-      `- Adatta ±10% per complessità (pagine, lingue, e-commerce, area riservata, integrazioni, contenuti).`,
-      `- Tutti i prezzi **IVA inclusa**.`,
-      ``,
-      `PACCHETTI (default)`,
-      `- Start (2.500 €): vetrina 1 pagina...`,
-      `- Pro (4.000 €): 5 pagine...`,
-      `- Leader (da 6.000 €): su misura...`,
+      `LINEE GUIDA PREZZI`,
+      `- Se "Prezzo" è indicato accanto al pacchetto, usalo come riferimento.`,
+      `- Se manca, stima coerente in base a complessità (pagine, lingue, e-commerce, area riservata, integrazioni, contenuti).`,
+      `- Prezzi in formato italiano. Assume IVA inclusa salvo diversa indicazione del cliente.`,
       ``,
       `STILE DI USCITA (solo in FASE 2)`,
       `- Niente tabelle, niente emoji, niente gergo.`,
       `- Voci economiche in bullet con trattino: "- Nome voce: 1.500,00 €" (numero PRIMA, poi "€", formato IT).`,
-      `- Includi tempi e termini standard (Start 2–3 sett.; Pro 3–4 sett.; Leader 4–8 sett.). Pagamenti 50%/50%. Validità 30 giorni.`,
+      `- Includi tempi e termini standard (range settimane), pagamenti 50%/50%, validità 30 giorni.`,
       ``,
       `STRUTTURA DEL PREVENTIVO FINALE (FASE 2)`,
       `Titolo: "PREVENTIVO COMPLETO"`,
-      `Sezioni (ordine): Riepilogo → Perché → Pacchetto consigliato (+ alternativa) → Voci → Tempi → Termini → Note → Totale finale.`,
+      `Sezioni (ordine): Riepilogo → Perché → Pacchetto consigliato (+ eventuale alternativa) → Voci → Tempi → Termini → Note → Totale finale.`,
       ``,
       `REGOLE FINALI (obbligatorie)`,
       `- NON produrre il preventivo finché A, B, C non sono tutti coperti.`,
-      `- Quando produci il preventivo, **chiudi SEMPRE** il messaggio con **UNO e un solo** blocco \`\`\`json esattamente così (numeri non formattati, valuta "EUR"):`,
-      `{ "pdfReady": true, "package": "Start|Pro|Leader", "subtotal": number, "discount": number|null, "total": number, "currency": "EUR", "deliveryTime": "string", "validityDays": 30 }`,
+      `- Il campo "package" nel JSON DEVE essere **esattamente** uno dei nomi elencati sopra.`,
+      `- Chiudi con **UNO e un solo** blocco \`\`\`json (numeri non formattati, valuta "EUR"):`,
+      `{ "pdfReady": true, "package": "UnoDeiPacchettiElencati", "subtotal": number, "discount": number|null, "total": number, "currency": "EUR", "deliveryTime": "string", "validityDays": 30 }`,
       `- Il totale deve rispettare: totale = subtotale − sconto.`,
       `- NON inserire altri blocchi di codice o JSON oltre a quello finale.`,
-      `- Se ti accorgi di non aver aggiunto il blocco JSON, **correggi immediatamente** appendendolo in coda e **non scrivere altro dopo il JSON**.`,
+      `- Se ti accorgi di non aver aggiunto il blocco JSON, **appendilo** subito in coda e **non scrivere altro dopo il JSON**.`,
     ].join("\n");
 
     console.log(
-      "[prompt/services] servizi caricati:",
-      servizi.length,
+      "[prompt/services] servizi:",
+      services.length,
       "clientId:",
       serviziClientId
     );
-    res.json({ systemPrompt });
+    // RITORNiamo anche i nomi pacchetto per matching lato client
+    res.json({ systemPrompt, services, serviceNames });
   } catch (e) {
     console.error(e);
     res.status(500).json({ error: "Server error" });

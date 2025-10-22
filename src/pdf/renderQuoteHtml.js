@@ -66,8 +66,6 @@ function sumLineItems(text) {
 
 function findMoneyAfter(labelRegex, text) {
   const re = new RegExp(
-    // opzionale **bold**, label, eventuale **bold**, poi : o –,
-    // poi numero (con . e ,), ma non percentuali o range
     "(?:\\*\\*|__)?\\s*(?:" +
       labelRegex +
       ")\\s*(?:\\*\\*|__)?\\s*[:\\-–]?\\s*€?\\s*([\\d\\.,]+)(?!\\s*%)(?!\\s*-)",
@@ -82,11 +80,6 @@ function totalsFromText(text) {
   const subtotal = findMoneyAfter("(?:sub\\s*totale|subtotale)", text);
   const discount = findMoneyAfter("sconto", text);
   return { subtotal, discount, total };
-}
-
-function inferPackageFromText(text) {
-  const m = String(text).match(/\b(Start|Pro|Leader)\b/i);
-  return m ? m[1][0].toUpperCase() + m[1].slice(1).toLowerCase() : null;
 }
 
 function stripFinalJsonBlock(s) {
@@ -122,7 +115,8 @@ function renderQuoteHtml({ agency, customer, quoteText, meta = {}, date }) {
   const fenceMeta = extractFenceMeta(quoteText || "") || {};
   meta = { ...meta, ...fenceMeta };
 
-  const pkg = meta.package || inferPackageFromText(quoteText) || "—";
+  // ❌ NIENTE inferenza Start/Pro/Leader: usa solo ciò che arriva dal meta/fence
+  const pkg = meta.package || "—";
 
   // leggi numeri dal meta (anche se sono stringhe "1.500,00")
   let nSubtotal = toNumber(meta.subtotal);
@@ -130,14 +124,12 @@ function renderQuoteHtml({ agency, customer, quoteText, meta = {}, date }) {
   let nTotal = toNumber(meta.total);
 
   // fallback dal testo (etichette Subtotale/Sconto/Totale)
-  if (typeof totalsFromText === "function") {
-    const t = totalsFromText(quoteText || "");
-    if (!Number.isFinite(nSubtotal) && Number.isFinite(t.subtotal))
-      nSubtotal = t.subtotal;
-    if (!Number.isFinite(nDiscount) && Number.isFinite(t.discount))
-      nDiscount = t.discount;
-    if (!Number.isFinite(nTotal) && Number.isFinite(t.total)) nTotal = t.total;
-  }
+  const t = totalsFromText(quoteText || "");
+  if (!Number.isFinite(nSubtotal) && Number.isFinite(t.subtotal))
+    nSubtotal = t.subtotal;
+  if (!Number.isFinite(nDiscount) && Number.isFinite(t.discount))
+    nDiscount = t.discount;
+  if (!Number.isFinite(nTotal) && Number.isFinite(t.total)) nTotal = t.total;
 
   // fallback: se manca il Subtotale ma ci sono righe con importi, prova a sommarle
   if (!Number.isFinite(nSubtotal)) {

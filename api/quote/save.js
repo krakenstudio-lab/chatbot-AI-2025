@@ -22,7 +22,6 @@ function setCors(req, res) {
     // niente credenziali → '*' va bene per la preflight
     res.setHeader("Access-Control-Allow-Origin", "*");
   }
-
   res.setHeader("Vary", "Origin, Access-Control-Request-Headers");
   res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
   res.setHeader(
@@ -108,13 +107,43 @@ function buildMetaFromText(text) {
     total: Number.isFinite(total) ? total : null,
   };
 }
-function inferPackageFromText(text) {
-  const m = String(text || "").match(/\b(Start|Pro|Leader)\b/i);
-  return m ? m[1][0].toUpperCase() + m[1].slice(1).toLowerCase() : null;
+
+// ===== Matching del pacchetto dai nomi DB =====
+function normalizeStr(s) {
+  return String(s || "")
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/\p{Diacritic}/gu, "")
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
 }
 
+async function inferPackageFromDb({ prisma, serviziClientId, text }) {
+  if (!prisma || !serviziClientId) return null;
+  try {
+    const servizi = await prisma.servizi.findMany({
+      where: {
+        flagActive: 1,
+        OR: [{ idCliente: serviziClientId }, { idCliente: null }],
+      },
+      select: { nome: true },
+      orderBy: { nome: "asc" },
+    });
+    const hay = normalizeStr(text);
+    for (const s of servizi) {
+      const n = normalizeStr(s.nome);
+      if (!n) continue;
+      const re = new RegExp(`\\b${n}\\b`);
+      if (re.test(hay) || hay.includes(n)) return s.nome;
+    }
+  } catch {
+    // ignore
+  }
+  return null;
+}
+
+// ===== Handler =====
 export default async function handler(req, res) {
-  // CORS prima di tutto
   setCors(req, res);
   if (req.method === "OPTIONS") return res.status(204).end();
   if (req.method !== "POST")
@@ -132,13 +161,20 @@ export default async function handler(req, res) {
       .trim();
     const ua = req.headers["user-agent"] || "";
 
-    const { clientKey, customer, quoteText, finalJson, siteUrl, chatHistory } =
-      req.body || {};
+    const {
+      clientKey,
+      serviziClientId, // ← IMPORTANTE: arriva dal frontend
+      customer,
+      quoteText,
+      finalJson,
+      siteUrl,
+      chatHistory,
+    } = req.body || {};
+
     if (!clientKey || !quoteText) {
       return res.status(400).json({ error: "Missing clientKey or quoteText" });
     }
 
-    // Prisma solo ora (dopo header CORS)
     const { prisma, Prisma } = await getPrisma();
 
     // 1) Client lookup
@@ -147,10 +183,20 @@ export default async function handler(req, res) {
     });
     if (!client) return res.status(401).json({ error: "Invalid clientKey" });
 
-    // 2) CORS dinamico sulla POST in base a allowedOrigins nel DB
-    const allowed = Array.isArray(client.allowedOrigins)
-      ? client.allowedOrigins
-      : [];
+    // 2) CORS dinamico sulla POST in base a allowedOrigins nel DB (string JSON o CSV)
+    let allowed = [];
+    if (client.allowedOrigins) {
+      try {
+        const parsed = JSON.parse(client.allowedOrigins);
+        if (Array.isArray(parsed)) allowed = parsed;
+      } catch {
+        // prova CSV
+        allowed = String(client.allowedOrigins)
+          .split(",")
+          .map((s) => s.trim())
+          .filter(Boolean);
+      }
+    }
     if (allowed.length && origin && !allowed.includes(origin)) {
       return res.status(403).json({ error: "Origin not allowed" });
     }
@@ -158,7 +204,16 @@ export default async function handler(req, res) {
     // 3) Persist (con fallback: se manca JSON, inferisci dal testo)
     const t = finalJson || {};
     const guessed = buildMetaFromText(quoteText);
-    const pkg = t.package || inferPackageFromText(quoteText);
+
+    // package: prima JSON, poi matching DB, nessun fallback statico
+    let pkg = t.package || null;
+    if (!pkg) {
+      pkg = await inferPackageFromDb({
+        prisma,
+        serviziClientId,
+        text: quoteText,
+      });
+    }
 
     const toDec = (v) =>
       v === null || v === undefined || v === "" ? null : new Prisma.Decimal(v);

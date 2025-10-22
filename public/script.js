@@ -16,6 +16,8 @@ window.__chatUser = window.__chatUser || null;
 // esempio: window.__chatUser = { name: "Giulia Rossi", role: "sales", provider: "clerk", providerId: "user_123" };
 
 let __dynamicSystemPrompt = null;
+let __serviceNames = []; // pacchetti dinamico dal DB
+let __services = []; // array completo { nome, descrizione, prezzo }
 
 async function loadDynamicSystemPrompt() {
   if (__dynamicSystemPrompt) return __dynamicSystemPrompt;
@@ -32,14 +34,41 @@ async function loadDynamicSystemPrompt() {
   });
   if (!res.ok) {
     console.warn("Dynamic prompt fallback to static. HTTP", res.status);
-    return (__dynamicSystemPrompt = DEFAULT_STATIC_PROMPT()); // fallback
+    return (__dynamicSystemPrompt = DEFAULT_STATIC_PROMPT());
   }
   const data = await res.json();
-  console.log(
-    "[prompt/services] caricata systemPrompt, lunghezza:",
-    (data.systemPrompt || "").length
-  );
+  __services = Array.isArray(data.services) ? data.services : [];
+  __serviceNames = Array.isArray(data.serviceNames) ? data.serviceNames : [];
+  console.log("[prompt/services] pacchetti:", __serviceNames);
   return (__dynamicSystemPrompt = data.systemPrompt || DEFAULT_STATIC_PROMPT());
+}
+
+function detectPackageFromText(text) {
+  if (!text || !__serviceNames.length) return null;
+  const hay = String(text).toLowerCase();
+
+  // match esatto o “quasi esatto” (accenti/spazi punteggiatura ignorati)
+  const norm = (s) =>
+    s
+      .toLowerCase()
+      .normalize("NFD")
+      .replace(/\p{Diacritic}/gu, "")
+      .replace(/[^a-z0-9]+/g, " ")
+      .trim();
+
+  const hayN = norm(hay);
+  let best = null;
+
+  for (const name of __serviceNames) {
+    const n = norm(name);
+    // parole intere o sottostringa molto vicina
+    const re = new RegExp(`\\b${n}\\b`);
+    if (re.test(hayN) || hayN.includes(n)) {
+      best = name; // tieni l'ultimo trovato (o potresti fermarti al primo)
+      break;
+    }
+  }
+  return best;
 }
 
 // fallback in caso l’endpoint non risponda
@@ -369,9 +398,8 @@ function normalizeMeta(meta, text) {
   m.discount = parseEuroToNumber(m.discount);
   m.total = parseEuroToNumber(m.total);
   if (!m.package) {
-    const hit = String(text).match(/\b(Start|Pro|Leader)\b/i);
-    if (hit)
-      m.package = hit[1][0].toUpperCase() + hit[1].slice(1).toLowerCase();
+    const detected = detectPackageFromText(text);
+    if (detected) m.package = detected;
   }
   return m;
 }
@@ -575,6 +603,7 @@ async function saveQuoteIfFinal(aiText) {
 
     const payload = {
       clientKey: CLIENT_KEY,
+      serviziClientId: SERVIZI_CLIENT_ID,
       customer: null, // i dati cliente arrivano dopo, al PDF
       quoteText: aiText,
       finalJson,
