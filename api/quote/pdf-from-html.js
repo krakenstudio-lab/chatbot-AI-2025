@@ -148,7 +148,7 @@ export default async function handler(req, res) {
             ? null
             : new Prisma.Decimal(v);
 
-        // salva PDF
+        // salva PDF binario
         const stored = await prisma.storedPdfDb.create({
           data: {
             filename: outName,
@@ -159,7 +159,10 @@ export default async function handler(req, res) {
           },
         });
 
-        // aggiorna quote
+        // prepara payload coerente con lo schema (String? per jsonFinal)
+        const jsonFinalStr =
+          meta && Object.keys(meta).length > 0 ? JSON.stringify(meta) : null;
+
         await prisma.quote.update({
           where: { id: String(quoteId) },
           data: {
@@ -182,9 +185,7 @@ export default async function handler(req, res) {
                 ? meta.validityDays
                 : undefined,
 
-            jsonFinal:
-              meta && Object.keys(meta).length > 0 ? meta : Prisma.JsonNull,
-
+            jsonFinal: jsonFinalStr, // ← String o null, NON Prisma.JsonNull
             status: "pdf_generated",
             pdfGeneratedAt: new Date(),
             storedPdfId: stored.id,

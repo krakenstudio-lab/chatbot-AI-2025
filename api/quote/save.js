@@ -218,6 +218,15 @@ export default async function handler(req, res) {
     const toDec = (v) =>
       v === null || v === undefined || v === "" ? null : new Prisma.Decimal(v);
 
+    const jsonFinalStr =
+      finalJson && Object.keys(finalJson).length > 0
+        ? JSON.stringify(finalJson)
+        : null;
+    const chatHistoryStr =
+      chatHistory && Array.isArray(chatHistory)
+        ? JSON.stringify(chatHistory)
+        : null;
+
     const data = {
       uid:
         Math.random().toString(36).slice(2, 7).toUpperCase() +
@@ -246,8 +255,8 @@ export default async function handler(req, res) {
           : null,
 
       quoteText,
-      jsonFinal: finalJson ?? Prisma.JsonNull,
-      chatHistory: chatHistory ?? Prisma.JsonNull,
+      jsonFinal: jsonFinalStr, // ← String o null
+      chatHistory: chatHistoryStr, // ← String o null
 
       status: "final",
       ip,
