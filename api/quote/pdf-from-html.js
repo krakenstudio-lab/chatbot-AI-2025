@@ -8,6 +8,7 @@ const ALLOWED_ORIGINS = [
   "https://vesewebdev.it",
   "https://www.vesewebdev.it",
   "https://chat.krakenstudio.it",
+  "http://localhost:3000",
 ];
 
 function setCors(req, res) {

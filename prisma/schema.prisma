@@ -1,9 +1,3 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
-// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
-// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
-
 generator client {
   provider = "prisma-client-js"
 }
@@ -13,7 +7,68 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-// ===== Enums =====
+model Client {
+  id             String       @id @default(cuid())
+  name           String
+  pwd            String       @db.VarChar(100)
+  embedKey       String       @unique
+  allowedOrigins String?      @db.LongText
+  status         ClientStatus @default(active)
+  createdAt      DateTime     @default(now())
+  quotes         Quote[]
+}
+
+model Quote {
+  id             String       @id @default(cuid())
+  uid            String       @unique
+  clientId       String
+  customerName   String?
+  customerEmail  String?
+  customerPhone  String?
+  siteUrl        String?
+  package        String?
+  subtotal       Decimal?     @db.Decimal(10, 2)
+  discount       Decimal?     @db.Decimal(10, 2)
+  total          Decimal?     @db.Decimal(10, 2)
+  currency       String       @default("EUR")
+  deliveryTime   String?
+  validityDays   Int?
+  quoteText      String       @db.LongText
+  jsonFinal      String?      @db.LongText
+  chatHistory    String?      @db.LongText
+  status         QuoteStatus  @default(final)
+  pdfGeneratedAt DateTime?
+  ip             String?      @db.VarChar(45)
+  userAgent      String?      @db.Text
+  storedPdfId    String?
+  createdAt      DateTime     @default(now())
+  client         Client       @relation(fields: [clientId], references: [id])
+  storedPdf      StoredPdfDb? @relation(fields: [storedPdfId], references: [id])
+
+  @@index([clientId, createdAt])
+  @@index([storedPdfId], map: "Quote_storedPdfId_fkey")
+}
+
+model StoredPdfDb {
+  id          String   @id @default(cuid())
+  filename    String
+  contentType String   @default("application/pdf")
+  bytes       Bytes
+  size        Int
+  chatId      String?
+  createdAt   DateTime @default(now())
+  Quote       Quote[]
+}
+
+model servizi {
+  id          Int     @id @default(autoincrement())
+  idCliente   Int?
+  nome        String  @db.VarChar(50)
+  flagActive  Int     @default(1)
+  prezzo      String? @db.VarChar(255)
+  descrizione String? @db.Text
+}
+
 enum ClientStatus {
   active
   disabled
@@ -26,66 +81,4 @@ enum QuoteStatus {
   sent
   accepted
   rejected
-}
-
-// ===== Models =====
-model Client {
-  id             String       @id @default(cuid())
-  name           String
-  embedKey       String       @unique // usato dallo snippet per identificare il tenant
-  allowedOrigins Json? // es. ["https://www.sito-del-cliente.it"]
-  status         ClientStatus @default(active)
-  createdAt      DateTime     @default(now())
-
-  quotes Quote[]
-}
-
-model Quote {
-  id       String @id @default(cuid())
-  uid      String @unique // short code pubblico/esterno
-  clientId String
-  client   Client @relation(fields: [clientId], references: [id])
-
-  customerName  String?
-  customerEmail String?
-  customerPhone String?
-  siteUrl       String?
-
-  package      String?
-  subtotal     Decimal? @db.Decimal(10, 2)
-  discount     Decimal? @db.Decimal(10, 2)
-  total        Decimal? @db.Decimal(10, 2)
-  currency     String   @default("EUR")
-  deliveryTime String?
-  validityDays Int?
-
-  quoteText   String @db.LongText
-  jsonFinal   Json?
-  chatHistory Json?
-
-  status         QuoteStatus @default(final)
-  pdfGeneratedAt DateTime?
-
-  ip        String? @db.VarChar(45)
-  userAgent String? @db.Text
-
-  // collega un PDF salvato (facoltativo) al preventivo
-  storedPdfId String?
-  storedPdf   StoredPdfDb? @relation(fields: [storedPdfId], references: [id])
-
-  createdAt DateTime @default(now())
-
-  @@index([clientId, createdAt])
-}
-
-// tuo modello esistente (lo cito per contesto, non serve modificarlo)
-model StoredPdfDb {
-  id          String   @id @default(cuid())
-  filename    String
-  contentType String   @default("application/pdf")
-  bytes       Bytes
-  size        Int
-  chatId      String?
-  createdAt   DateTime @default(now())
-  Quote       Quote[]
 }
